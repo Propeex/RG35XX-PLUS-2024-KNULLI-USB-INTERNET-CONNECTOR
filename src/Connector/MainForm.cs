@@ -25,6 +25,8 @@ internal sealed class MainForm : Form
     private readonly Label _internetValue = new();
     private readonly ComboBox _language = new();
     private readonly Button _connectToggle = new();
+    private readonly ProgressBar _actionProgress = new();
+    private readonly Label _actionProgressLabel = new();
     private readonly Label _logLabel = new();
     private readonly TextBox _log = new();
     private readonly System.Windows.Forms.Timer _statusTimer = new();
@@ -43,6 +45,8 @@ internal sealed class MainForm : Form
     private int _healthPolling;
     private int _deviceGeneration;
     private int _missingDeviceChecksDuringAction;
+    private int _missingDeviceChecksWhileIdle;
+    private int _failedInternetChecks;
     private CancellationTokenSource? _actionCancellation;
     private string _lastAdbDiagnostic = "";
     private DateTimeOffset _lastHealthCheck = DateTimeOffset.MinValue;
@@ -54,8 +58,8 @@ internal sealed class MainForm : Form
     internal MainForm()
     {
         Text = "RG35XX+ (2024) KNULLI USB Internet Connector";
-        ClientSize = new Size(900, 470);
-        MinimumSize = new Size(850, 420);
+        ClientSize = new Size(900, 530);
+        MinimumSize = new Size(850, 480);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10F);
         BackColor = Color.FromArgb(247, 248, 250);
@@ -87,10 +91,15 @@ internal sealed class MainForm : Form
             _closed = true;
             _statusTimer.Stop();
             _statusTimer.Dispose();
-            // Launch idle-server shutdown before the WinForms message loop
-            // exits. Never terminate an ADB server needed by an owned tunnel.
-            if (!_mayHaveActiveSession && AdbProbe.ServerPort == "5056")
-                _ = AdbProbe.StopDedicatedAsync();
+            // Do not fire-and-forget: when the WinForms message loop exits,
+            // an unawaited kill-server may never finish. Port 5037 is shared
+            // and is never stopped. An explicitly preserved SSH session keeps
+            // the private ADB server alive by design.
+            if (!_mayHaveActiveSession)
+            {
+                try { AdbProbe.StopDedicatedAsync().GetAwaiter().GetResult(); }
+                catch (Exception e) { System.Diagnostics.Debug.WriteLine(e); }
+            }
         };
     }
 
@@ -155,13 +164,26 @@ internal sealed class MainForm : Form
             await RunActionAsync(ShouldDisconnect ? EngineAction.Stop : EngineAction.Start, false);
         Controls.Add(_connectToggle);
 
-        _logLabel.Location = new Point(24, 227);
+        _actionProgress.Location = new Point(288, 214);
+        _actionProgress.Size = new Size(324, 18);
+        _actionProgress.Style = ProgressBarStyle.Blocks;
+        _actionProgress.Minimum = 0;
+        _actionProgress.Maximum = 6;
+        _actionProgress.Visible = false;
+        Controls.Add(_actionProgress);
+
+        _actionProgressLabel.Location = new Point(288, 237);
+        _actionProgressLabel.Size = new Size(500, 24);
+        _actionProgressLabel.Visible = false;
+        Controls.Add(_actionProgressLabel);
+
+        _logLabel.Location = new Point(24, 269);
         _logLabel.Size = new Size(290, 28);
         _logLabel.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
         Controls.Add(_logLabel);
 
-        _log.Location = new Point(24, 259);
-        _log.Size = new Size(852, 186);
+        _log.Location = new Point(24, 303);
+        _log.Size = new Size(852, 202);
         _log.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
         _log.Multiline = true;
         _log.ReadOnly = true;
@@ -172,7 +194,11 @@ internal sealed class MainForm : Form
         Controls.Add(_log);
 
         Resize += (_, _) =>
+        {
             _connectToggle.Left = (ClientSize.Width - _connectToggle.Width) / 2;
+            _actionProgress.Left = _connectToggle.Left;
+            _actionProgressLabel.Left = _connectToggle.Left;
+        };
     }
 
     protected override void WndProc(ref Message m)
@@ -209,6 +235,15 @@ internal sealed class MainForm : Form
         _busy = true;
         _missingDeviceChecksDuringAction = 0;
         _actionCancellation = new CancellationTokenSource();
+        _failedInternetChecks = 0;
+        _actionProgress.Visible = true;
+        _actionProgressLabel.Visible = true;
+        _actionProgress.Style = action == EngineAction.Start
+            ? ProgressBarStyle.Blocks : ProgressBarStyle.Marquee;
+        _actionProgress.Value = 0;
+        _actionProgressLabel.Text = action == EngineAction.Start
+            ? UiStrings.Get(_selectedLanguage, "ProgressStarting")
+            : UiStrings.Get(_selectedLanguage, "ProgressStopping");
         var actionStopwatch = Stopwatch.StartNew();
         // A connection in transition is not a verified healthy connection.
         _internetHealthy = false;
@@ -219,7 +254,11 @@ internal sealed class MainForm : Form
         ApplyLanguage();
         try
         {
-            var outcome = await _engine.RunAsync(action, AppendLog, _actionCancellation.Token);
+            var outcome = await _engine.RunAsync(action, message =>
+            {
+                AppendLog(message);
+                UpdateOperationProgress(action, message);
+            }, _actionCancellation.Token);
             _mayHaveActiveSession = File.Exists(SshPidFile);
             _lastHealthCheck = DateTimeOffset.MinValue;
             if (action == EngineAction.Stop)
@@ -232,18 +271,24 @@ internal sealed class MainForm : Form
             }
             else if (outcome.Success)
             {
-                // An owned SSH session and independent HTTPS proof are both required.
-                _internetHealthy = _mayHaveActiveSession &&
-                    await UsbEngineRunner.NativeInternetHealthyAsync(_actionCancellation.Token);
-                if (_internetHealthy)
-                    AppendLog("Independent native HTTPS verification passed.");
-                else
-                    AppendLog("Internet remains disconnected: independent HTTPS verification failed.");
+                // The PowerShell backend already checked direct native HTTPS
+                // before returning success. Do not immediately override that
+                // proof with an independent 7-second probe or missing PID file.
+                _internetHealthy = true;
+                _lastHealthCheck = DateTimeOffset.UtcNow;
+                AppendLog("Backend native HTTPS verification passed; Internet connected.");
             }
             else
             {
                 _internetHealthy = false;
                 AppendLog("USB Internet start failed; see detailed stage messages above.");
+            }
+
+            if (outcome.Success)
+            {
+                _actionProgress.Style = ProgressBarStyle.Blocks;
+                _actionProgress.Value = _actionProgress.Maximum;
+                _actionProgressLabel.Text = UiStrings.Get(_selectedLanguage, "ProgressComplete");
             }
 
             if (closeAfterStop && action == EngineAction.Stop && outcome.Success)
@@ -276,6 +321,8 @@ internal sealed class MainForm : Form
             _actionCancellation?.Dispose();
             _actionCancellation = null;
             _busy = false;
+            _actionProgress.Visible = false;
+            _actionProgressLabel.Visible = false;
             ApplyLanguage();
             if (!_closed && !_closingAfterStop)
             {
@@ -283,6 +330,40 @@ internal sealed class MainForm : Form
                 _ = PollDeviceAsync();
             }
         }
+    }
+
+    private void UpdateOperationProgress(EngineAction action, string message)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => UpdateOperationProgress(action, message)));
+            return;
+        }
+        if (_closed || IsDisposed || !_busy) return;
+
+        if (action == EngineAction.Stop)
+        {
+            // Stopping remote helpers and restoring DNS are not predictable
+            // durations. Marquee is truthful; 100% is shown only on success.
+            _actionProgressLabel.Text = UiStrings.Get(_selectedLanguage, "ProgressStopping");
+            return;
+        }
+
+        int stage = message switch
+        {
+            var s when s.Contains("Stage USB forwarding:", StringComparison.Ordinal) => 1,
+            var s when s.Contains("Stage SSH/SOCKS:", StringComparison.Ordinal) => 2,
+            var s when s.Contains("Stage device payload:", StringComparison.Ordinal) => 3,
+            var s when s.Contains("Stage TUN/DNS:", StringComparison.Ordinal) => 4,
+            var s when s.Contains("Stage native HTTPS:", StringComparison.Ordinal) => 5,
+            var s when s.Contains("Stage compatibility:", StringComparison.Ordinal) => 6,
+            _ => 0
+        };
+        if (stage <= 0) return;
+        _actionProgress.Style = ProgressBarStyle.Blocks;
+        _actionProgress.Value = Math.Max(stage, _actionProgress.Value);
+        _actionProgressLabel.Text = string.Format(
+            UiStrings.Get(_selectedLanguage, "ProgressStage"), stage, 6);
     }
 
     private async Task PollDeviceAsync()
@@ -312,9 +393,17 @@ internal sealed class MainForm : Form
                 if (_missingDeviceChecksDuringAction >= 2)
                     CancelActiveOperation("USB device unavailable twice during operation.");
             }
-            if (_adbReady != ready)
+            if (ready)
+                _missingDeviceChecksWhileIdle = 0;
+            else
+                _missingDeviceChecksWhileIdle++;
+            // A single slow adb.exe response must not flicker a physically
+            // connected device or hide the Internet status.
+            bool visibleReady = ready || (_adbReady &&
+                _missingDeviceChecksWhileIdle < 2);
+            if (_adbReady != visibleReady)
             {
-                _adbReady = ready;
+                _adbReady = visibleReady;
                 _deviceGeneration++;
                 _lastHealthCheck = DateTimeOffset.MinValue;
                 if (!ready)
@@ -328,9 +417,7 @@ internal sealed class MainForm : Form
 
             if (!_adbReady)
                 _internetHealthy = false;
-            else if (!_mayHaveActiveSession)
-                _internetHealthy = false;
-            else if (!_busy)
+            else if (!_busy && (_mayHaveActiveSession || _internetHealthy))
                 _ = CheckInternetHealthAsync();
 
             ApplyLanguage();
@@ -352,8 +439,9 @@ internal sealed class MainForm : Form
 
     private async Task CheckInternetHealthAsync()
     {
-        if (_busy || _closed || !_adbReady || !_mayHaveActiveSession ||
-            DateTimeOffset.UtcNow - _lastHealthCheck < TimeSpan.FromSeconds(15) ||
+        if (_busy || _closed || !_adbReady ||
+            (!_mayHaveActiveSession && !_internetHealthy) ||
+            DateTimeOffset.UtcNow - _lastHealthCheck < TimeSpan.FromSeconds(20) ||
             Interlocked.Exchange(ref _healthPolling, 1) != 0)
             return;
         int generation = _deviceGeneration;
@@ -362,13 +450,26 @@ internal sealed class MainForm : Form
         {
             bool healthy = await UsbEngineRunner.NativeInternetHealthyAsync(CancellationToken.None);
             if (_closed || IsDisposed || _busy || !_adbReady ||
-                generation != _deviceGeneration || !_mayHaveActiveSession)
+                generation != _deviceGeneration)
                 return;
-            if (healthy != _internetHealthy)
-                AppendLog(healthy
-                    ? "Native Internet HTTPS health check passed."
-                    : "Native Internet HTTPS health check failed.");
-            _internetHealthy = healthy;
+            if (healthy)
+            {
+                _failedInternetChecks = 0;
+                if (!_internetHealthy)
+                    AppendLog("Native Internet HTTPS health check passed.");
+                _internetHealthy = true;
+            }
+            else
+            {
+                _failedInternetChecks++;
+                // Do not tell the user Internet is gone because a single
+                // public HTTPS endpoint or DNS lookup temporarily timed out.
+                if (_failedInternetChecks >= 2 && _internetHealthy)
+                {
+                    _internetHealthy = false;
+                    AppendLog("Two consecutive native HTTPS health checks failed.");
+                }
+            }
             ApplyLanguage();
         }
         catch (Exception ex)
@@ -404,6 +505,10 @@ internal sealed class MainForm : Form
             ? Color.FromArgb(24, 129, 82) : Color.FromArgb(189, 49, 49);
 
         _connectToggle.Text = T(ShouldDisconnect ? "Disconnect" : "Connect");
+        if (_busy && _actionProgress.Style != ProgressBarStyle.Marquee &&
+            _actionProgress.Value > 0)
+            _actionProgressLabel.Text = string.Format(
+                T("ProgressStage"), _actionProgress.Value, 6);
         _connectToggle.Enabled = !_busy && _engineInstalled &&
             (_adbReady || _mayHaveActiveSession && ShouldDisconnect);
         _logLabel.Text = T("Log");
