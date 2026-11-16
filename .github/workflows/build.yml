@@ -100,7 +100,9 @@ jobs:
         run: |
           $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
           if (!(Test-Path $csc)) { throw 'Windows .NET Framework compiler not available.' }
-          & $csc /nologo /target:winexe /platform:x64 /out:artifacts/windows/RG35XX-Start.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.dll src/Launcher/Launcher.cs
+          $launcherSource = (Resolve-Path '.\\src\\Launcher\\Launcher.cs').Path
+          $launcherOutput = Join-Path (Resolve-Path '.\\artifacts\\windows').Path 'RG35XX-Start.exe'
+          & $csc /nologo /target:winexe /platform:x64 "/out:$launcherOutput" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.dll $launcherSource
           if ($LASTEXITCODE -ne 0) { throw 'Lightweight launcher compilation failed.' }
           $launcher = (Resolve-Path 'artifacts/windows/RG35XX-Start.exe').Path
           $p = Start-Process -FilePath $launcher -ArgumentList '--self-test' -Wait -PassThru
