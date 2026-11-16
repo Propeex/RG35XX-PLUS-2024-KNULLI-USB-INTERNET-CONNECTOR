@@ -5,18 +5,20 @@
 ## 실행
 
 1. 다운로드한 ZIP 파일을 빈 폴더에 압축 해제합니다.
-2. 폴더 내 `RG35XXUsbInternetConnector.exe`를 실행합니다.
+2. 폴더 내 **`RG35XX-Start.exe`를 실행합니다.** `RG35XXUsbInternetConnector.exe`는 내부 .NET 8 실행 파일입니다.
 3. 최초 실행 시 언어(한국어 / English / 日本語)를 선택합니다.
-4. Google Android SDK Platform-Tools 라이선스를 확인하고 동의하면 자동 설치됩니다.
-5. Google 공식 `platform-tools`는 **EXE와 같은 폴더**의 `platform-tools/` 아래로 설치됩니다.
-6. KNULLI에서 USB ADB 모드 및 SSH를 켜고 데이터 케이블로 PC와 연결합니다.
-7. 프로그램이 기기를 감지하면 가운데 인터넷 연결 버튼을 누릅니다.
+4. PC에 **.NET 8 Desktop Runtime**이 없다면 선택한 언어로 안내하고, 동의 시 Microsoft 공식 설치 스크립트로 해당 Windows 사용자 계정에 **한 번만** 설치합니다. 이미 있으면 즉시 다음 단계로 진행합니다.
+5. Google Android SDK Platform-Tools 라이선스를 확인하고 동의하면 자동 설치됩니다.
+6. Google 공식 `platform-tools`는 **EXE와 같은 폴더**의 `platform-tools/` 아래로 설치됩니다.
+7. KNULLI에서 USB ADB 모드 및 SSH를 켜고 데이터 케이블로 PC와 연결합니다.
+8. 프로그램이 기기를 감지하면 가운데 인터넷 연결 버튼을 누릅니다.
 
 ## 폴더 구조
 
 ```text
 RG35XX-USB-Internet-Connector/
-├─ RG35XXUsbInternetConnector.exe
+├─ RG35XX-Start.exe               # 실행용 작은 런처
+├─ RG35XXUsbInternetConnector.exe  # .NET 8 GUI (런타임 미포함)
 ├─ README_KR.md
 ├─ backend/
 │  ├─ USB-FullInternet.ps1
@@ -30,6 +32,8 @@ RG35XX-USB-Internet-Connector/
    ├─ initialization-complete.marker
    └─ google-sdk-license-accepted.marker
 ```
+
+**참고:** .NET 8 Desktop Runtime은 이미 설치된 PC에서는 내려받지 않습니다. 처음 필요할 때만 `%LOCALAPPDATA%\\RG35XXUsbInternetConnector\\dotnet`에 사용자별로 설치합니다. Windows 10/11의 기본 .NET Framework 4.x를 사용하는 작은 런처가 설치 안내를 담당합니다. 자동 연결은 하지 않습니다.
 
 **주의:** 보안상 SSH 개인키와 상세 연결 로그는 Windows 사용자별 `%LOCALAPPDATA%`에 별도로 보관합니다. `backend`의 실행 코드 및 스크립트는 GitHub에서 수정할 수 있지만, 다운로드한 빌드의 파일을 직접 변경하면 무결성 검사에 실패합니다. **소스를 수정했다면 CI에서 새 ZIP을 빌드**하는 것이 권장됩니다.
 
