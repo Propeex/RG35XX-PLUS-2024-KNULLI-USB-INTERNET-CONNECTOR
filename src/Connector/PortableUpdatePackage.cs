@@ -48,7 +48,7 @@ internal static class PortableUpdatePackage
                         throw new InvalidDataException("Symbolic links are not allowed in Release ZIP.");
 
                     totalBytes = checked(totalBytes + entry.Length);
-                    if (entry.Length > 150_000_000 || totalBytes > 250_000_000)
+                    if (entry.Length > 250_000_000 || totalBytes > 400_000_000)
                         throw new InvalidDataException("Release ZIP exceeds safe extraction limit.");
                     string target = Path.GetFullPath(Path.Combine(staging, relative));
                     if (!target.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
