@@ -301,19 +301,24 @@ function StartInternet() {
         StopDevice
         StopOwnedSSH
     }
+    Log 'Stage USB forwarding: configuring ADB TCP port 2222.'
     [void](MustAdb @('forward','tcp:2222','tcp:22') 'USB SSH port forwarding')
     $utc = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     [void](MustAdb @('shell',"date -u -s @$utc") 'set device clock')
+    Log 'Stage SSH/SOCKS: establishing authenticated reverse tunnel.'
     StartSSH
+    Log 'Stage device payload: uploading verified ARM64 binaries and scripts.'
     Deploy
     # KNULLI may have /etc/resolv.conf -> ../tmp/resolv.conf with a missing target.
     $resolver = RunAdb @('shell',
         'if [ "$(readlink /etc/resolv.conf 2>/dev/null)" = "../tmp/resolv.conf" ] && [ ! -e /tmp/resolv.conf ]; then touch /tmp/resolv.conf; fi')
     if ($resolver.Code -ne 0) { Fail 'Cannot prepare KNULLI volatile resolver target.' }
+    Log 'Stage TUN/DNS: starting device TUN interface and DNS-over-HTTPS.'
     Log 'Starting device TUN and DNS-over-HTTPS.'
     $result = RunAdb @('shell',"sh $script:base/start-fullnet.sh")
     if ($result.Text) { Log $result.Text }
     if ($result.Code -ne 0) { Fail 'KNULLI TUN/DNS startup failed.' }
+    Log 'Stage native HTTPS: validating DNS, route and direct HTTPS without proxy settings.'
     $ok = $false
     for ($attempt=0; $attempt -lt 3; $attempt++) {
         if (CheckNative) { $ok = $true; break }
@@ -323,6 +328,7 @@ function StartInternet() {
         try { StopDevice } catch { Log ("Recovery warning: " + $_.Exception.Message) }
         Fail 'Native DNS and HTTPS verification failed after TUN startup.'
     }
+    Log 'Stage compatibility: applying KNULLI IP recognition and PortMaster startup guards.'
     ApplyCompatibility
     $script:connectionHealthy = $true
     Log 'Connected: native HTTPS, IP display and PortMaster compatibility applied.'
