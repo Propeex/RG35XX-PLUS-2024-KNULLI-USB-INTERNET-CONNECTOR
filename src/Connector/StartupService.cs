@@ -12,10 +12,11 @@ internal static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "RG35XXUsbInternetConnector");
 
-    internal static string ToolsDirectory => Path.Combine(BaseDirectory, "platform-tools");
+    internal static string PortableRoot => AppContext.BaseDirectory;
+    internal static string ToolsDirectory => Path.Combine(PortableRoot, "platform-tools");
     internal static string AdbPath => Path.Combine(ToolsDirectory, "adb.exe");
-    internal static string InitializedMarker => Path.Combine(BaseDirectory, "initialization-complete.marker");
-    internal static string SdkLicenseAcceptedMarker => Path.Combine(BaseDirectory, "google-sdk-license-accepted.marker");
+    internal static string InitializedMarker => Path.Combine(PortableRoot, "data", "initialization-complete.marker");
+    internal static string SdkLicenseAcceptedMarker => Path.Combine(PortableRoot, "data", "google-sdk-license-accepted.marker");
 }
 
 internal record StartupStep(string Message, long BytesReceived = 0, long? BytesTotal = null);
