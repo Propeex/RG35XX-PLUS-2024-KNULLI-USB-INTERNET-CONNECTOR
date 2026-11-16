@@ -1,29 +1,34 @@
-using System;
 using System.Drawing;
 using System.Windows.Forms;
 
 namespace RG35XXUsbInternetConnector;
 
 /// <summary>
-/// Startup gate: the main window is NEVER displayed until prerequisite
-/// checks/installs finish. The progress bar is shown ONLY during the first
-/// successful initialization, never inside MainForm or on later launches.
+/// All prerequisites finish before MainForm is constructed. Only the first
+/// startup may display a progress bar. On a new portable installation the
+/// user chooses language BEFORE any Google SDK license question.
 /// </summary>
 internal sealed class BootstrapForm : Form
 {
     private readonly Label _heading = new();
     private readonly Label _stage = new();
+    private readonly Label _languageLabel = new();
+    private readonly ComboBox _languageCombo = new();
+    private readonly Button _continue = new();
     private readonly ProgressBar _progress = new();
     private readonly Button _retry = new();
     private readonly TextBox _details = new();
     private readonly List<string> _events = new();
+
     private readonly bool _firstLaunch = !File.Exists(AppPaths.InitializedMarker);
+    private readonly bool _chooseLanguage = !LanguageSettings.IsConfigured;
+    private string _selectedLanguage = LanguageSettings.Load();
     private bool _busy;
 
     internal BootstrapForm()
     {
         Text = "RG35XX+ (2024) Connector — Startup";
-        ClientSize = new Size(560, _firstLaunch ? 265 : 145);
+        ClientSize = new Size(580, _firstLaunch ? 322 : _chooseLanguage ? 232 : 145);
         MinimumSize = MaximumSize = Size;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -31,23 +36,61 @@ internal sealed class BootstrapForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10F);
 
-        _heading.Text = _firstLaunch ? "First-time setup" : "Checking for updates...";
         _heading.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
         _heading.Location = new Point(22, 15);
-        _heading.Size = new Size(515, 35);
+        _heading.Size = new Size(530, 37);
         Controls.Add(_heading);
 
-        _stage.Text = "Initializing...";
-        _stage.Location = new Point(22, 60);
-        _stage.Size = new Size(515, 30);
+        _languageLabel.Location = new Point(22, 65);
+        _languageLabel.Size = new Size(145, 29);
+        _languageLabel.Visible = _chooseLanguage;
+        Controls.Add(_languageLabel);
+
+        _languageCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+        _languageCombo.Location = new Point(174, 60);
+        _languageCombo.Size = new Size(160, 32);
+        _languageCombo.Visible = _chooseLanguage;
+        foreach (var item in UiStrings.Languages) _languageCombo.Items.Add(item.Display);
+        _languageCombo.SelectedIndexChanged += (_, _) =>
+        {
+            int i = _languageCombo.SelectedIndex;
+            if (i < 0) return;
+            _selectedLanguage = UiStrings.Languages[i].Code;
+            RefreshLabels();
+        };
+        Controls.Add(_languageCombo);
+
+        _continue.Location = new Point(418, 59);
+        _continue.Size = new Size(136, 34);
+        _continue.Visible = _chooseLanguage;
+        _continue.Click += async (_, _) =>
+        {
+            try
+            {
+                LanguageSettings.Save(_selectedLanguage);
+                _continue.Enabled = false;
+                _languageCombo.Enabled = false;
+                await StartAsync();
+            }
+            catch (Exception e)
+            {
+                _stage.Text = e.Message;
+                _continue.Enabled = true;
+                _languageCombo.Enabled = true;
+            }
+        };
+        Controls.Add(_continue);
+
+        int offset = _chooseLanguage ? 48 : 0;
+        _stage.Location = new Point(22, 61 + offset);
+        _stage.Size = new Size(531, 30);
         Controls.Add(_stage);
 
-        // Never show download/update progress on subsequent launches.
         _progress.Visible = _firstLaunch;
         _progress.Style = ProgressBarStyle.Marquee;
         _progress.MarqueeAnimationSpeed = 35;
-        _progress.Location = new Point(22, 101);
-        _progress.Size = new Size(515, 18);
+        _progress.Location = new Point(22, 101 + offset);
+        _progress.Size = new Size(532, 18);
         Controls.Add(_progress);
 
         _details.Visible = _firstLaunch;
@@ -55,39 +98,117 @@ internal sealed class BootstrapForm : Form
         _details.ReadOnly = true;
         _details.ScrollBars = ScrollBars.Vertical;
         _details.Font = new Font("Consolas", 9F);
-        _details.Location = new Point(22, 134);
-        _details.Size = new Size(515, 73);
+        _details.Location = new Point(22, 134 + offset);
+        _details.Size = new Size(532, 76);
         Controls.Add(_details);
 
-        _retry.Text = "Retry";
         _retry.Visible = false;
-        _retry.Location = new Point(429, _firstLaunch ? 221 : 96);
-        _retry.Size = new Size(108, 32);
+        _retry.Location = new Point(436, _firstLaunch ? 268 : 104 + offset);
+        _retry.Size = new Size(118, 32);
         _retry.Click += async (_, _) => await StartAsync();
         Controls.Add(_retry);
 
-        Shown += async (_, _) => await StartAsync();
+        _languageCombo.SelectedIndex = Array.FindIndex(UiStrings.Languages,
+            x => x.Code == _selectedLanguage);
+        RefreshLabels();
+
+        Shown += async (_, _) =>
+        {
+            if (!_chooseLanguage) await StartAsync();
+        };
+    }
+
+    private string T(string key)
+    {
+        var ko = new Dictionary<string, string>
+        {
+            ["Welcome"] = "첫 실행 설정",
+            ["Checking"] = "업데이트 확인 중",
+            ["LanguageChoice"] = "사용할 언어",
+            ["Continue"] = "설치 시작",
+            ["Retry"] = "다시 시도",
+            ["Initializing"] = "설치 준비 중...",
+            ["SDKTitle"] = "Google Android SDK 사용 동의",
+            ["SDKQuestion"] = "이 프로그램은 Google의 공식 Android SDK Platform-Tools를 다운로드합니다. 아래 약관을 확인한 후 동의하시면 설치를 진행합니다.\n\nhttps://developer.android.com/studio/terms\n\n약관에 동의하시겠습니까?",
+            ["Failed"] = "시작 실패 — 다시 시도하거나 창을 닫으세요.",
+            ["CheckApp"] = "프로그램 업데이트 확인 중...",
+            ["CheckTools"] = "Platform-Tools 버전 확인 중...",
+            ["DownloadTools"] = "Platform-Tools 다운로드 중...",
+            ["VerifyTools"] = "Platform-Tools 검증 중...",
+            ["InstallTools"] = "Platform-Tools 설치 중...",
+            ["Backend"] = "인터넷 연결 엔진 검사 중...",
+            ["Done"] = "준비 완료."
+        };
+        var en = new Dictionary<string, string>
+        {
+            ["Welcome"] = "First-time setup",
+            ["Checking"] = "Checking for updates",
+            ["LanguageChoice"] = "Language",
+            ["Continue"] = "Start setup",
+            ["Retry"] = "Retry",
+            ["Initializing"] = "Preparing...",
+            ["SDKTitle"] = "Google Android SDK License",
+            ["SDKQuestion"] = "This app downloads Google's official Android SDK Platform-Tools. Please review the terms and accept to continue.\n\nhttps://developer.android.com/studio/terms\n\nDo you agree to the terms?",
+            ["Failed"] = "Startup failed — retry or close this window.",
+            ["CheckApp"] = "Checking application updates...",
+            ["CheckTools"] = "Checking Platform-Tools revision...",
+            ["DownloadTools"] = "Downloading Platform-Tools...",
+            ["VerifyTools"] = "Verifying Platform-Tools...",
+            ["InstallTools"] = "Installing Platform-Tools...",
+            ["Backend"] = "Checking USB internet backend...",
+            ["Done"] = "Ready."
+        };
+        var ja = new Dictionary<string, string>
+        {
+            ["Welcome"] = "初回セットアップ",
+            ["Checking"] = "更新を確認中",
+            ["LanguageChoice"] = "言語",
+            ["Continue"] = "セットアップ開始",
+            ["Retry"] = "再試行",
+            ["Initializing"] = "準備中...",
+            ["SDKTitle"] = "Google Android SDK ライセンス",
+            ["SDKQuestion"] = "このアプリは Google 公式の Android SDK Platform-Tools をダウンロードします。利用規約を確認し、同意する場合は続行してください。\n\nhttps://developer.android.com/studio/terms\n\n同意しますか？",
+            ["Failed"] = "起動できませんでした — 再試行してください。",
+            ["CheckApp"] = "アプリの更新を確認中...",
+            ["CheckTools"] = "Platform-Tools のバージョンを確認中...",
+            ["DownloadTools"] = "Platform-Tools をダウンロード中...",
+            ["VerifyTools"] = "Platform-Tools を検証中...",
+            ["InstallTools"] = "Platform-Tools をインストール中...",
+            ["Backend"] = "USB インターネットエンジンを確認中...",
+            ["Done"] = "準備完了。"
+        };
+        var dictionary = _selectedLanguage switch
+        {
+            "en-US" => en,
+            "ja-JP" => ja,
+            _ => ko
+        };
+        return dictionary.TryGetValue(key, out var value) ? value : key;
+    }
+
+    private void RefreshLabels()
+    {
+        _heading.Text = T(_firstLaunch ? "Welcome" : "Checking");
+        _languageLabel.Text = T("LanguageChoice");
+        _continue.Text = T("Continue");
+        _retry.Text = T("Retry");
+        if (!_busy) _stage.Text = T("Initializing");
     }
 
     private async Task StartAsync()
     {
-        if (_busy) return;
+        if (_busy || (_chooseLanguage && !LanguageSettings.IsConfigured)) return;
         _busy = true;
         _retry.Visible = false;
         try
         {
             if (!File.Exists(AppPaths.SdkLicenseAcceptedMarker))
             {
-                var consent = MessageBox.Show(this,
-                    "This utility installs Google's Android SDK Platform-Tools. " +
-                    "Please review the Android SDK License Agreement at " +
-                    "https://developer.android.com/studio/terms before continuing. " +
-                    "Do you agree to its terms?",
-                    "Google Android SDK License",
+                var consent = MessageBox.Show(this, T("SDKQuestion"), T("SDKTitle"),
                     MessageBoxButtons.YesNo, MessageBoxIcon.Information);
                 if (consent != DialogResult.Yes)
                     throw new InvalidOperationException("Android SDK license was not accepted.");
-                Directory.CreateDirectory(AppPaths.BaseDirectory);
+                Directory.CreateDirectory(Path.GetDirectoryName(AppPaths.SdkLicenseAcceptedMarker)!);
                 File.WriteAllText(AppPaths.SdkLicenseAcceptedMarker, DateTimeOffset.UtcNow.ToString("O"));
             }
 
@@ -96,13 +217,11 @@ internal sealed class BootstrapForm : Form
             bool updateLaunching = await svc.PrepareAsync(reporter, Log, CancellationToken.None);
             if (updateLaunching)
             {
-                // The updater waits for our process to exit before replacing the EXE.
                 Close();
                 return;
             }
 
-            // Mark setup complete only when platform-tools are present/usable.
-            Directory.CreateDirectory(AppPaths.BaseDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(AppPaths.InitializedMarker)!);
             File.WriteAllText(AppPaths.InitializedMarker, DateTimeOffset.UtcNow.ToString("O"));
             Hide();
             using (var main = new MainForm(_events.ToArray()))
@@ -111,15 +230,13 @@ internal sealed class BootstrapForm : Form
         }
         catch (Exception ex)
         {
-            _stage.Text = "Startup failed — retry or close this window.";
+            _stage.Text = T("Failed");
             Log("Startup failed: " + ex.Message);
             _retry.Visible = true;
             _retry.Enabled = true;
             if (_firstLaunch) _progress.Style = ProgressBarStyle.Continuous;
             if (!_firstLaunch)
-            {
-                MessageBox.Show(this, ex.Message, "Startup failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
+                MessageBox.Show(this, ex.Message, T("Failed"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally
         {
@@ -130,7 +247,16 @@ internal sealed class BootstrapForm : Form
     private void UpdateStage(StartupStep step)
     {
         if (IsDisposed) return;
-        _stage.Text = step.Message;
+        string raw = step.Message;
+        string key = raw.StartsWith("Checking application", StringComparison.Ordinal) ? "CheckApp"
+            : raw.StartsWith("Checking Android", StringComparison.Ordinal) ? "CheckTools"
+            : raw.StartsWith("Downloading Platform", StringComparison.Ordinal) ? "DownloadTools"
+            : raw.StartsWith("Verifying Platform", StringComparison.Ordinal) ? "VerifyTools"
+            : raw.StartsWith("Installing Platform", StringComparison.Ordinal) ? "InstallTools"
+            : raw.StartsWith("Verifying embedded", StringComparison.Ordinal) ? "Backend"
+            : raw.StartsWith("Startup checks completed", StringComparison.Ordinal) ? "Done"
+            : "Initializing";
+        _stage.Text = T(key);
         if (!_firstLaunch) return;
         if (step.BytesTotal.HasValue && step.BytesTotal.Value > 0)
         {
@@ -145,7 +271,7 @@ internal sealed class BootstrapForm : Form
 
     private void Log(string message)
     {
-        _events.Add(message);
+        _events.Add(message); // English diagnostics, regardless of selected language
         if (_firstLaunch && !IsDisposed)
         {
             if (_details.TextLength > 0) _details.AppendText(Environment.NewLine);
