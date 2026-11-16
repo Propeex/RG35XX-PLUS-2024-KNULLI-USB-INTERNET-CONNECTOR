@@ -97,7 +97,9 @@ internal sealed class MainForm : Form
             // the private ADB server alive by design.
             if (!_mayHaveActiveSession)
             {
-                try { AdbProbe.StopDedicatedAsync().GetAwaiter().GetResult(); }
+                // Use the thread pool to avoid WinForms sync-context deadlock
+                // while we wait for a bounded owned-server shutdown.
+                try { Task.Run(AdbProbe.StopDedicatedAsync).GetAwaiter().GetResult(); }
                 catch (Exception e) { System.Diagnostics.Debug.WriteLine(e); }
             }
         };
@@ -425,9 +427,13 @@ internal sealed class MainForm : Form
         catch (Exception ex)
         {
             if (_closed || IsDisposed) return;
-            _adbReady = false;
-            _internetHealthy = false;
-            _deviceGeneration++;
+            _missingDeviceChecksWhileIdle++;
+            if (_missingDeviceChecksWhileIdle >= 2 && _adbReady)
+            {
+                _adbReady = false;
+                _internetHealthy = false;
+                _deviceGeneration++;
+            }
             AppendLog("ADB device probe failed: " + ex.GetType().Name);
             ApplyLanguage();
         }
@@ -476,8 +482,9 @@ internal sealed class MainForm : Form
         {
             if (!_closed && !IsDisposed)
             {
-                _internetHealthy = false;
-                AppendLog("Native Internet probe failed: " + ex.GetType().Name);
+                _failedInternetChecks++;
+                if (_failedInternetChecks >= 2) _internetHealthy = false;
+                AppendLog("Native Internet probe error: " + ex.GetType().Name);
                 ApplyLanguage();
             }
         }
@@ -524,22 +531,18 @@ internal sealed class MainForm : Form
                 "USB Internet", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        if (!_mayHaveActiveSession) return;
+        if (!ShouldDisconnect) return;
 
+        // Closing an Internet session must not leave an ADB/SSH daemon behind.
+        // The user can cancel quitting, but not silently leave the tunnel active.
         var answer = MessageBox.Show(this,
-            "Disconnect USB internet before exiting?\n\n" +
+            "Disconnect USB Internet and close the application?\n\n" +
             "Yes: Disconnect safely and exit.\n" +
-            "No: Keep the connection running in the background.\n" +
-            "Cancel: Return to the application.",
-            "USB Internet", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-        if (answer == DialogResult.Cancel)
-        {
-            e.Cancel = true;
-            return;
-        }
-        if (answer == DialogResult.No) return;
+            "No: Return to the application.",
+            "USB Internet", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         e.Cancel = true;
-        await RunActionAsync(EngineAction.Stop, closeAfterStop: true);
+        if (answer == DialogResult.Yes)
+            await RunActionAsync(EngineAction.Stop, closeAfterStop: true);
     }
 
     private void AppendLog(string message)
