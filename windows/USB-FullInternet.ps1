@@ -147,9 +147,14 @@ function ProcessForOwnedSSH() {
     if ($text -notmatch '^[0-9]+$') { return $null }
     $p = Get-CimInstance Win32_Process -Filter "ProcessId=$text" -ErrorAction SilentlyContinue
     if (-not $p -or $p.Name -ne 'ssh.exe') { return $null }
-    if ($p.CommandLine -notmatch 'rg35xx_usb_gui_ed25519' -or
+    # Public-key setup can fail while the user successfully authenticates
+    # with the KNULLI password. Such a session has no -i key argument.
+    # Require our private diagnostics path and the exact loopback tunnel
+    # instead of the optional identity filename.
+    if ($p.CommandLine -notmatch 'ssh-client\.log' -or
         $p.CommandLine -notmatch 'root@127\.0\.0\.1' -or
-        $p.CommandLine -notmatch '(\s|^)-R\s+1080(\s|$)') { return $null }
+        $p.CommandLine -notmatch '(\s|^)-R\s+1080(\s|$)' -or
+        $p.CommandLine -notmatch '(\s|^)-p\s+2222(\s|$)') { return $null }
     return $p
 }
 function StopOwnedSSH() {
