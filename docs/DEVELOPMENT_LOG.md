@@ -16,3 +16,13 @@
 - v1.5 auto-recovery was blocked by stale `active` / DNS failure; Windows ADB server could linger and lock the tools folder.
 - v1.6 historical script-based WinForms GUI was proposed, but **not yet verified as a working EXE**.
 - Legacy build artifacts were outside the GitHub repository. Do not assume they are present in a fresh chat or checkout.
+
+## 2026-11-16 — Updated startup UX and first EXE implementation (PR #6)
+- User explicitly removed update progress from the main GUI. Only **first-run separate setup** may display progress; updates on subsequent launches occur **before** main screen opens, without progress bars.
+- Refactored Program to launch BootstrapForm before MainForm; removed two update bars from MainForm.
+- Added SDK license acknowledgement, first-run marker and retry-on-failure logic.
+- Implemented official Google SDK repository stable metadata inspection, staged Platform-Tools Windows ZIP download, SHA-256 verification when provided, safe archive validation, version comparison, swap with recovery and offline fallback.
+- Implemented beta/stable GitHub Releases detection, SemVer comparison, expected single-file EXE asset and SHA-256 validation, and updater copied from the running EXE to avoid Windows file locking.
+- Added real ADB USB readiness polling via isolated short-lived ADB server on port 5056, distinguishing device-ready status from internet-connected status. Network toggle is deliberately disabled until engine #4 is migrated.
+- Added self-contained single-file publish setting. Windows CI/real hardware testing still required; no release was created.
+- Sources live in `feature/windows-gui-foundation`, linked to draft PR #6. Main documentation records decisions to allow future chats to resume.
