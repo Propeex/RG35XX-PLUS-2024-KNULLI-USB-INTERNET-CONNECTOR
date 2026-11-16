@@ -1,6 +1,8 @@
 # RG35XX+ (2024) KNULLI USB Internet Connector
 
-**Status: early development / beta preparation. The user has confirmed one successful native USB Internet connection on the development EXE; UI status, STOP, cleanup, and portability still require retesting. No public beta release yet.**
+**Status: experimental v0.1.0-beta.1 prerelease.** One hardware tester confirmed a successful KNULLI USB Internet connection; final START/STOP UI transitions, ADB cleanup, fresh-runtime setup, and automatic updating are **not yet hardware-verified**. Do not mistake beta availability for a stable release.
+
+**Beta download:** [GitHub Releases — v0.1.0-beta.1](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/releases/tag/v0.1.0-beta.1). Extract the full portable ZIP, then run **`KNULLI USB Link.exe`**.
 
 A Windows desktop utility for sharing a PC's internet connection with the **Anbernic RG35XX+ (2024 edition, no built-in Wi-Fi)** running KNULLI, using a USB-C cable—without a Wi-Fi dongle.
 
