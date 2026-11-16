@@ -87,6 +87,10 @@ internal sealed class MainForm : Form
             _closed = true;
             _statusTimer.Stop();
             _statusTimer.Dispose();
+            // Launch idle-server shutdown before the WinForms message loop
+            // exits. Never terminate an ADB server needed by an owned tunnel.
+            if (!_mayHaveActiveSession && AdbProbe.ServerPort == "5056")
+                _ = AdbProbe.StopDedicatedAsync();
         };
     }
 
