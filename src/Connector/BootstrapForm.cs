@@ -14,7 +14,6 @@ internal sealed class BootstrapForm : Form
     private readonly Label _stage = new();
     private readonly Label _languageLabel = new();
     private readonly ComboBox _languageCombo = new();
-    private readonly Button _continue = new();
     private readonly ProgressBar _progress = new();
     private readonly Button _retry = new();
     private readonly TextBox _details = new();
@@ -24,11 +23,13 @@ internal sealed class BootstrapForm : Form
     private readonly bool _chooseLanguage = !LanguageSettings.IsConfigured;
     private string _selectedLanguage = LanguageSettings.Load();
     private bool _busy;
+    private bool _languagePromptPending;
 
     internal BootstrapForm()
     {
-        Text = "RG35XX+ (2024) Connector — Startup";
-        ClientSize = new Size(580, _firstLaunch ? 322 : _chooseLanguage ? 232 : 145);
+        Text = _chooseLanguage ? "Language" : "RG35XX+ (2024) Connector — Startup";
+        ClientSize = new Size(580, _chooseLanguage ? 145 : _firstLaunch ? 322 : 145);
+        _languagePromptPending = _chooseLanguage;
         MinimumSize = MaximumSize = Size;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -37,6 +38,7 @@ internal sealed class BootstrapForm : Form
         Font = new Font("Segoe UI", 10F);
 
         _heading.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
+        _heading.Visible = !_chooseLanguage;
         _heading.Location = new Point(22, 15);
         _heading.Size = new Size(530, 37);
         Controls.Add(_heading);
@@ -51,39 +53,30 @@ internal sealed class BootstrapForm : Form
         _languageCombo.Size = new Size(160, 32);
         _languageCombo.Visible = _chooseLanguage;
         foreach (var item in UiStrings.Languages) _languageCombo.Items.Add(item.Display);
-        _languageCombo.SelectedIndexChanged += (_, _) =>
+        _languageCombo.SelectedIndexChanged += async (_, _) =>
         {
             int i = _languageCombo.SelectedIndex;
-            if (i < 0) return;
+            if (i < 0 || !_languagePromptPending) return;
             _selectedLanguage = UiStrings.Languages[i].Code;
-            RefreshLabels();
-        };
-        Controls.Add(_languageCombo);
-
-        _continue.Location = new Point(418, 59);
-        _continue.Size = new Size(136, 34);
-        _continue.Visible = _chooseLanguage;
-        _continue.Click += async (_, _) =>
-        {
             try
             {
                 LanguageSettings.Save(_selectedLanguage);
-                _continue.Enabled = false;
-                _languageCombo.Enabled = false;
-                if (_firstLaunch) _progress.Visible = true;
+                _languagePromptPending = false;
+                ActivateLocalizedStartup();
                 await StartAsync();
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                _stage.Text = e.Message;
-                _continue.Enabled = true;
-                _languageCombo.Enabled = true;
+                _stage.Text = T("Failed");
+                Log("Language selection failed: " + ex.GetType().Name);
+                MessageBox.Show(this, ex.Message, T("Failed"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         };
-        Controls.Add(_continue);
+        Controls.Add(_languageCombo);
 
-        int offset = _chooseLanguage ? 48 : 0;
-        _stage.Location = new Point(22, 61 + offset);
+        _stage.Visible = !_chooseLanguage;
+        _stage.Location = new Point(22, 61);
         _stage.Size = new Size(531, 30);
         Controls.Add(_stage);
 
@@ -91,33 +84,50 @@ internal sealed class BootstrapForm : Form
         _progress.Visible = _firstLaunch && !_chooseLanguage;
         _progress.Style = ProgressBarStyle.Marquee;
         _progress.MarqueeAnimationSpeed = 35;
-        _progress.Location = new Point(22, 101 + offset);
+        _progress.Location = new Point(22, 101);
         _progress.Size = new Size(532, 18);
         Controls.Add(_progress);
 
-        _details.Visible = _firstLaunch;
+        _details.Visible = _firstLaunch && !_chooseLanguage;
         _details.Multiline = true;
         _details.ReadOnly = true;
         _details.ScrollBars = ScrollBars.Vertical;
         _details.Font = new Font("Consolas", 9F);
-        _details.Location = new Point(22, 134 + offset);
+        _details.Location = new Point(22, 134);
         _details.Size = new Size(532, 76);
         Controls.Add(_details);
 
         _retry.Visible = false;
-        _retry.Location = new Point(436, _firstLaunch ? 268 : 104 + offset);
+        _retry.Location = new Point(436, _firstLaunch ? 268 : 104);
         _retry.Size = new Size(118, 32);
         _retry.Click += async (_, _) => await StartAsync();
         Controls.Add(_retry);
 
-        _languageCombo.SelectedIndex = Array.FindIndex(UiStrings.Languages,
-            x => x.Code == _selectedLanguage);
+        if (!_chooseLanguage)
+            _languageCombo.SelectedIndex = Array.FindIndex(UiStrings.Languages,
+                x => x.Code == _selectedLanguage);
+        // On a new installation no locale is preselected: the first visible
+        // screen contains only the literal English "Language" and its choices.
         RefreshLabels();
 
         Shown += async (_, _) =>
         {
             if (!_chooseLanguage) await StartAsync();
         };
+    }
+
+    private void ActivateLocalizedStartup()
+    {
+        _languageLabel.Visible = false;
+        _languageCombo.Visible = false;
+        _heading.Visible = true;
+        _stage.Visible = true;
+        _progress.Visible = _firstLaunch;
+        _details.Visible = _firstLaunch;
+        ClientSize = new Size(580, _firstLaunch ? 322 : 145);
+        MinimumSize = MaximumSize = Size;
+        Text = T(_firstLaunch ? "Welcome" : "Checking");
+        RefreshLabels();
     }
 
     private string T(string key)
@@ -190,9 +200,12 @@ internal sealed class BootstrapForm : Form
 
     private void RefreshLabels()
     {
+        if (_languagePromptPending)
+        {
+            _languageLabel.Text = "Language";
+            return;
+        }
         _heading.Text = T(_firstLaunch ? "Welcome" : "Checking");
-        _languageLabel.Text = T("LanguageChoice");
-        _continue.Text = T("Continue");
         _retry.Text = T("Retry");
         if (!_busy) _stage.Text = T("Initializing");
     }
@@ -226,7 +239,7 @@ internal sealed class BootstrapForm : Form
             Directory.CreateDirectory(Path.GetDirectoryName(AppPaths.InitializedMarker)!);
             File.WriteAllText(AppPaths.InitializedMarker, DateTimeOffset.UtcNow.ToString("O"));
             Hide();
-            using (var main = new MainForm(_events.ToArray()))
+            using (var main = new MainForm())
                 main.ShowDialog();
             Close();
         }
