@@ -18,8 +18,6 @@
 +-----------------------------------------------------------+
 | RG35XX+ (2024) KNULLI USB Internet Connector     Language v|
 | Status: device disconnected / ready / connected / error   |
-| [App update progress -------] (visible when relevant)     |
-| [Platform-Tools progress --] (visible when relevant)       |
 |                                                           |
 |                  [ Connect / Disconnect ]                 |
 |                                                           |
@@ -38,7 +36,7 @@ Languages: ko-KR, en-US, ja-JP. Language selection updates UI immediately and is
 4. On a first install or after failed update, keep the last functioning application usable and give a meaningful English log.
 5. Platform-Tools: fetch latest official Windows package **only from Google**, determine installed revision from `platform-tools/source.properties`, compare with Google's SDK repository metadata, download ZIP with progress, validate ZIP extraction paths and package structure, stage replacement, then switch atomically when no ADB operation is running.
 6. Installed Platform-Tools location must be stable and separate from app EXE to avoid Windows file locking. Avoid an endless `adb devices` loop that restarts the ADB daemon immediately after Disconnect.
-7. UI should display progress for **checking / downloading / verifying / installing**; do not manufacture numeric percentages for unknown-length operations (use indeterminate progress).
+7. **New startup UX rule:** only first-run setup has a separate progress screen, with real determinate download % and indeterminate checks/verifications. On subsequent launches, show at most a status-only startup window. Never show update progress inside the main screen. Keep main UI hidden until checks/updates finish.
 
 ## USB connectivity pipeline
 
@@ -61,3 +59,12 @@ Languages: ko-KR, en-US, ja-JP. Language selection updates UI immediately and is
 - CI must compile Windows EXE and run unit tests; production release requires physical RG35XX 2024 testing.
 - Source and license audit required before distributing compiled ARM64 TUN/DNS helper binaries and third-party artifacts.
 - Code review via PRs; accepted milestone -> version tag -> GitHub prerelease while in beta. Never claim a release exists before the GitHub API confirms it.
+
+## Bootstrap/main window boundary (2026-11-16)
+
+- `Program` first starts `BootstrapForm`, never `MainForm` directly.
+- First run is detected via a marker in `%LOCALAPPDATA%\RG35XXUsbInternetConnector`; first-run progress only appears while the marker is absent.
+- Main screen is created only after the bootstrap succeeds (or safely falls back to installed dependencies while offline).
+- A future app update may launch a short-lived helper copy and exit the old process; the new version restarts and repeats the pre-main check.
+- Google SDK license consent is collected before first automatic Platform-Tools download.
+- As of this commit, source is **unverified on Windows**; all updater behavior requires CI + release-to-release tests before a beta release.
