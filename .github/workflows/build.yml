@@ -71,6 +71,19 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Parse and validate tracked Windows PowerShell 5.1 orchestrator
+        shell: powershell
+        run: |
+          $scriptPath = Join-Path $PWD "windows\USB-FullInternet.ps1"
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $scriptPath, [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Host $_.ToString() }
+            throw "PowerShell orchestration has parse errors."
+          }
+          Write-Host "Windows PowerShell orchestrator syntax OK."
       - name: Download verified backend payload from this workflow
         uses: actions/download-artifact@v4
         with:
