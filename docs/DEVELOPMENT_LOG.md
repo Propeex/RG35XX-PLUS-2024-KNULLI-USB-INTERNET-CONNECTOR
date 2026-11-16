@@ -88,3 +88,13 @@
 - PR #9 squash-merged to main: `5e2a7724a86fa7f790df8d5eb7d53803b7d8916b`.
 - Verified development artifacts existed: `gui-development-build` and `windows-portable-zip`. No GitHub Release was created.
 - Remaining actual-device acceptance: attached USB must display Ready, Connect/Disconnect must work, SSH process lifecycle, KNULLI IP alias, native HTTPS, ScreenScraper, theme download, PortMaster and stale-state recovery. Also test portable ZIP GitHub Release updater restart/rollback and first-run SDK installation with user-selected language.
+
+
+## 2026-11-16 — START/STOP regression log analysis and follow-up branch
+
+- Hardware logs provided by the user: START 13:00:01→13:00:07 detected the authorized ADB device and entered stale-state cleanup. KNULLI \`stop-fullnet.sh\` reported \`STOP COMPLETE\`, but the Windows script incorrectly concluded \`active\` or \`rgusb0\` remained and aborted before starting the new tunnel. A later standalone STOP at 13:07 failed at the same verification.
+- **Hypothesis, pending actual device retest:** some KNULLI adbd shells may return adb exit 0 even when remote \`test -e\` or \`ip link show\` failed. This would make both previous \`Exists\` and \`TunExists\` checks return true regardless of remote state. Preserve all evidence; do not claim proof of the underlying firmware behavior.
+- Branch \`fix/device-state-ui-stop-verification\` adds explicit remote output markers for file/TUN existence, inspects the remote STOP script exit marker, verifies \`active\` and \`rgusb0\` independently with bounded retries, and logs both outcomes. Do not delete unknown ownership markers or unowned network interfaces.
+- An independent ADB native HTTPS health probe now requires a positive shell-produced marker. Merely having an \`active\` file, an SSH PID marker or \`adb.exe\` exit 0 is not Internet success. The PowerShell runner streams stage messages during operation rather than after exit.
+- Product UX requirements from the same conversation: initial \`Language\` chooser is the only visible text before selection; KO/EN/JA localized flow starts immediately. Main window has two *separate* binary indicators: device (green connected/gray disconnected) and Internet (green connected/red disconnected), hiding Internet when no device. Activity heading is localized and visible log starts empty each GUI launch. The top-right combo displays only the current language. ADB polling improves via Windows device-change notifications, shorter cycle/timeout and rejection of multiple authorized devices.
+- CI/unit smoke tests are not proof of actual START/STOP, native HTTPS, ScreenScraper or PortMaster function. Real RG35XX+ (2024) USB reconnect, stale-state, STOP and rollback tests remain release gates. No beta Release yet.
