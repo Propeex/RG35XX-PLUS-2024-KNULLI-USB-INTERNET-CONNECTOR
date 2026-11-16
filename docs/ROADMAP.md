@@ -84,3 +84,8 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] Test the new EXE start/stop, SSH key setup, native DNS, ScreenScraper, theme and PortMaster on the physical device.
 - [ ] Test unplug/reconnect, stale active flag, Windows process cleanup and recovery on the real device.
 - [ ] Merge an acceptable milestone; create a **beta** Release only when actual functionality and update installer are tested.
+
+### Merged development checkpoint
+
+- [x] PR #7 merged into main (`669f7da`): hidden GUI-to-backend bridge, native Go/shell source and CI.
+- [ ] No successful physical device test on the new EXE yet; original local v1.6 ZIP still required. **Do not publish beta as working until that dependency is eliminated and tests pass.**
