@@ -26,6 +26,14 @@ internal static class SelfTests
                 "multiple authorized devices are ambiguous");
             Assert(!AdbProbe.HasReadyDevice("serial-one offline"),
                 "offline USB transport is not ready");
+            Assert(SshPasswordBridge.IsPasswordPrompt(new[] { "root@127.0.0.1's password:" }),
+                "default root password challenge can use headless askpass");
+            Assert(!SshPasswordBridge.IsPasswordPrompt(new[] { "Enter passphrase for key" }),
+                "askpass must not answer SSH identity passphrases");
+            Assert(!SshPasswordBridge.IsPasswordPrompt(new[] { "Confirm SSH host fingerprint" }),
+                "askpass must not answer host key confirmation prompts");
+            Assert(!SshPasswordBridge.IsPasswordPrompt(Array.Empty<string>()),
+                "askpass must reject missing prompt");
             Assert(UsbEngineRunner.NativeProbeSucceeded(0, "RGUSB_NATIVE_OK\r\n"),
                 "explicit remote HTTPS success required");
             Assert(!UsbEngineRunner.NativeProbeSucceeded(0, "RGUSB_NATIVE_FAIL\r\n"),
