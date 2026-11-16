@@ -111,6 +111,11 @@ internal static class SelfUpdateService
             progress.Report(new StartupStep("Verifying application ZIP and backend..."));
             await VerifySha256Async(downloaded, hex, ct);
             stage = PortableUpdatePackage.StageAndValidate(downloaded);
+            // Check the *new* executable in its complete staged directory
+            // before replacing a working installation. The existing EXE's
+            // ZIP verifier alone cannot detect a non-starting new build.
+            progress.Report(new StartupStep("Testing downloaded application before install..."));
+            await PreflightStagedExecutableAsync(stage, ct);
             string newExeHash = PortableUpdatePackage.ExeHash(stage);
             string? currentExe = Environment.ProcessPath;
             if (string.IsNullOrWhiteSpace(currentExe) || !File.Exists(currentExe))
@@ -142,6 +147,38 @@ internal static class SelfUpdateService
                 try { Directory.Delete(stage, recursive: true); } catch (IOException) { }
             }
         }
+    }
+
+    private static async Task PreflightStagedExecutableAsync(string stage, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(45));
+        var info = new ProcessStartInfo(Path.Combine(stage, PortableUpdatePackage.Executable))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = stage
+        };
+        info.ArgumentList.Add("--self-test");
+        using var process = Process.Start(info)
+            ?? throw new InvalidOperationException("Downloaded executable failed to launch.");
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync(CancellationToken.None);
+            }
+            catch (InvalidOperationException) { }
+            if (ct.IsCancellationRequested) throw;
+            throw new InvalidDataException("Downloaded executable self-test timed out.");
+        }
+        if (process.ExitCode != 0)
+            throw new InvalidDataException("Downloaded executable did not pass its self-test.");
     }
 
     private static async Task DownloadAsync(
