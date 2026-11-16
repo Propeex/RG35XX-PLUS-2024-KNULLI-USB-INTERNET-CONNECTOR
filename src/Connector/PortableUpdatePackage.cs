@@ -13,7 +13,7 @@ internal static class PortableUpdatePackage
 {
     internal const string ReleaseAsset = "RG35XX-USB-Internet-Connector.zip";
     internal const string Executable = "RG35XXUsbInternetConnector.exe";
-    internal const string Launcher = "RG35XX-Start.exe";
+    internal const string Launcher = "KNULLI USB Link.exe";
 
     internal static string StageAndValidate(string zipFile)
     {
