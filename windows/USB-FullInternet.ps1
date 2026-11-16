@@ -348,6 +348,7 @@ function StartInternet() {
     $tun = TunExists
     if ($active -and (CheckNative)) {
         Log 'Existing USB native HTTPS connection is healthy.'
+        Log 'RGUSB_NATIVE_HTTPS_OK: direct HTTPS verified on KNULLI.'
         Push (Join-Path $script:root 'device/compat-fullnet.sh') "$script:base/compat-fullnet.sh"
         [void](MustAdb @('shell',"chmod 755 $script:base/compat-fullnet.sh") 'chmod compatibility')
         ApplyCompatibility
@@ -390,6 +391,9 @@ function StartInternet() {
         try { StopDevice } catch { Log ("Recovery warning: " + $_.Exception.Message) }
         Fail 'Native DNS and HTTPS verification failed after TUN startup.'
     }
+    # A failed optional compatibility step must not erase observed native
+    # Internet success. GUI consumes this proof separately from the exit code.
+    Log 'RGUSB_NATIVE_HTTPS_OK: direct HTTPS verified on KNULLI.'
     Log 'Stage compatibility: applying KNULLI IP recognition and PortMaster startup guards.'
     ApplyCompatibility
     $script:connectionHealthy = $true
