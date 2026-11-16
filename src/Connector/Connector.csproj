@@ -7,11 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>RG35XXUsbInternetConnector</AssemblyName>
     <RootNamespace>RG35XXUsbInternetConnector</RootNamespace>
-    <ApplicationIcon></ApplicationIcon>
     <Version>0.1.0</Version>
     <FileVersion>0.1.0.0</FileVersion>
     <InformationalVersion>0.1.0-beta.0</InformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
+    <!-- The EXE is copied for the safe self-update helper. Bundle native runtime files too. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
