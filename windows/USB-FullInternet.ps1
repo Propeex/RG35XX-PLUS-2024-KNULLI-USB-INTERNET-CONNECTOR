@@ -243,18 +243,38 @@ function StartSSH() {
         return
     }
     StopOwnedSSH
-    $key = InstallKey
+    $key = $null
+    try {
+        $key = InstallKey
+    } catch {
+        # KNULLI supports password authentication too. An unavailable key
+        # registration must not block this known-good firmware login method.
+        Log ("SSH public-key setup unavailable; trying password authentication: " + $_.Exception.Message)
+    }
     $ssh = CommandPath 'ssh.exe'
+    $askpassExe = Join-Path (Split-Path -Parent $script:root) 'RG35XXUsbInternetConnector.exe'
+    Need $askpassExe
     $known = Join-Path $script:state 'known_hosts'
     $sshlog = Join-Path $script:state 'ssh-client.log'
     # Reset previous attempts so the private log describes this connection only.
     [IO.File]::WriteAllText($sshlog,'',(New-Object Text.UTF8Encoding($false)))
     $info = New-Object Diagnostics.ProcessStartInfo
     $info.FileName = $ssh
-    $info.Arguments = ('-v -N -T -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" -i "{2}" -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog,$key)
+    $keyArg = if ($key) { ('-i "{0}"' -f $key) } else { '' }
+    # Try the connector-owned key first; if KNULLI rejects it, askpass
+    # supplies one automatic "linux" password response. The password is
+    # never written to the SSH command line or any file.
+    $info.Arguments = ('-v -N -T -o BatchMode=no -o NumberOfPasswordPrompts=1 -o IdentitiesOnly=yes -o PreferredAuthentications=publickey,password -o PasswordAuthentication=yes -o KbdInteractiveAuthentication=no -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" {2} -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog,$keyArg)
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    # OpenSSH invokes our own published WinExe as SSH_ASKPASS; no third-party
+    # sshpass or external credential helper is needed. Windows OpenSSH 8.6+
+    # requires SSH_ASKPASS_REQUIRE=force for noninteractive prompts.
+    $info.EnvironmentVariables['SSH_ASKPASS'] = $askpassExe
+    $info.EnvironmentVariables['SSH_ASKPASS_REQUIRE'] = 'force'
+    $info.EnvironmentVariables['RG35XX_USB_SSH_ASKPASS'] = '1'
+    $info.EnvironmentVariables['DISPLAY'] = 'localhost:0'
     $p = [Diagnostics.Process]::Start($info)
     [IO.File]::WriteAllText((Join-Path $script:state 'ssh.pid'),[string]$p.Id)
     $script:sshStartedHere = $true
@@ -282,7 +302,7 @@ function StartSSH() {
     if (Test-Path -LiteralPath $sshlog) {
         $sshReason = Get-Content -LiteralPath $sshlog -Raw -ErrorAction SilentlyContinue
         if ($sshReason -match 'Permission denied \(publickey(?:,password)?\)') {
-            Fail 'SSH root public-key authentication rejected by KNULLI. Key registration was verified; check server key permissions and private SSH log.'
+            Fail 'KNULLI SSH authentication rejected both configured methods (owned key and default firmware password). Confirm SSH is enabled and the root password is still the default; see the private ssh-client.log.'
         }
         if ($sshReason -match 'remote port forwarding failed') {
             Fail 'KNULLI SSH server rejected reverse SOCKS forwarding on port 1080.'
