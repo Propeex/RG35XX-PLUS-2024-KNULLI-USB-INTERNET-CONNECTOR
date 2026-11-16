@@ -62,11 +62,11 @@ internal static class PlatformToolsService
             throw new InvalidOperationException("SDK download URL must be HTTPS on dl.google.com.");
 
         Directory.CreateDirectory(AppPaths.BaseDirectory);
-        string session = Path.Combine(AppPaths.BaseDirectory, "stage-" + Guid.NewGuid().ToString("N"));
+        string session = Path.Combine(AppPaths.PortableRoot, ".tools-stage-" + Guid.NewGuid().ToString("N"));
         string zip = Path.Combine(session, "platform-tools.zip");
         string extract = Path.Combine(session, "extract");
         string staged = Path.Combine(extract, "platform-tools");
-        string backup = Path.Combine(AppPaths.BaseDirectory,
+        string backup = Path.Combine(AppPaths.PortableRoot,
             "platform-tools-backup-" + Guid.NewGuid().ToString("N"));
 
         Directory.CreateDirectory(session);
