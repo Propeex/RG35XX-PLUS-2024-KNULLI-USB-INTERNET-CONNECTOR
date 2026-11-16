@@ -85,7 +85,7 @@ internal sealed class StartupService
         if (!File.Exists(AppPaths.AdbPath))
             throw new FileNotFoundException("Platform-Tools installation finished without adb.exe.");
 
-        progress.Report(new StartupStep("Verifying embedded USB network backend..."));
+        progress.Report(new StartupStep("Verifying portable USB network backend..."));
         try
         {
             await UsbBackendBundle.EnsureInstalledAsync(log, cancellation);
@@ -95,7 +95,7 @@ internal sealed class StartupService
         {
             // The backend is optional for GUI development builds. Never silently
             // trust a malformed archive; leave the Connect button unavailable.
-            log("Embedded engine unavailable or invalid: " + ex.Message);
+            log("Portable backend unavailable or invalid: " + ex.Message);
         }
 
         progress.Report(new StartupStep("Startup checks completed."));
