@@ -133,3 +133,17 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] **Manual Windows UI retest**: actual language selector, localized Google SDK consent and unclipped Language label.
 - [ ] **Release update test**: portable EXE/backend upgrade across two prereleases while keeping adjacent Platform-Tools and user settings.
 - [ ] **No beta Release yet**: wait for successful physical connection and reliable STOP.
+
+
+## Next hardware retest — separate device/Internet indicators and START/STOP markers
+
+- [x] Source: initial language chooser contains only \`Language\` and choices; selected locale applies before SDK consent.
+- [x] Source: separate device and Internet binary indicators; device unplug hides Internet.
+- [x] Source: no recycled startup messages in the main activity view, localized heading, current-language selector.
+- [x] Source: ADB USB arrival/removal hints + frequent probe and multi-device rejection.
+- [x] Source: explicit remote shell state markers, independent STOP checks and native HTTPS proof; live stage output during long actions.
+- [ ] CI compile, PowerShell AST parse, ARM64 backend tests, EXE smoke and portable ZIP integrity **must pass** on this branch.
+- [ ] Hardware: validate improved device plug/unplug reporting and both UI colors.
+- [ ] Hardware: check actual \`active\`/TUN result, START, healthy HTTPS, successful STOP, reconnect and PortMaster.
+- [ ] Regression: first-run three locales, persistent language, restart resets GUI activity log but retains private technical diagnostics.
+- [ ] No Beta Release until these hardware and real portable update tests pass.
