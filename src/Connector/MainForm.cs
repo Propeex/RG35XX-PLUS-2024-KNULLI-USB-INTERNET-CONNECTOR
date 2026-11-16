@@ -45,6 +45,11 @@ internal sealed class MainForm : Form
 
         BuildLayout();
         _engineInstalled = LegacyEngineBundle.Installed;
+        // A previous GUI instance may have been closed while its SSH tunnel
+        // remained alive. Never kill that ADB server merely to poll status.
+        _mayHaveActiveSession = File.Exists(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RG35XX_USB_FullNet", "ssh.pid"));
         _language.SelectedIndex = 0;
         ApplyLanguage();
 
@@ -119,7 +124,7 @@ internal sealed class MainForm : Form
         _connectToggle.FlatAppearance.BorderSize = 0;
         _connectToggle.Font = new Font("Segoe UI", 13F, FontStyle.Bold);
         _connectToggle.Click += async (_, _) =>
-            await RunActionAsync(_state == ConnectionState.Connected
+            await RunActionAsync(ShouldDisconnect
                 ? EngineAction.Stop : EngineAction.Start, false);
         Controls.Add(_connectToggle);
 
@@ -144,9 +149,13 @@ internal sealed class MainForm : Form
             _connectToggle.Left = (ClientSize.Width - _connectToggle.Width) / 2;
     }
 
+    private bool ShouldDisconnect => _state == ConnectionState.Connected
+        || (_mayHaveActiveSession && !_adbReady);
+
     private async Task RunActionAsync(EngineAction action, bool closeAfterStop)
     {
-        if (_busy || !_engineInstalled || !_adbReady) return;
+        if (_busy || !_engineInstalled || (!_adbReady && action != EngineAction.Stop))
+            return;
         _busy = true;
         _statusTimer.Stop();
         SetState(action == EngineAction.Start
@@ -159,6 +168,11 @@ internal sealed class MainForm : Form
             {
                 if (!outcome.Success)
                 {
+                    // The legacy STOP cleans Windows SSH and ADB even if the
+                    // device was unplugged. Recheck ownership marker locally.
+                    _mayHaveActiveSession = File.Exists(Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "RG35XX_USB_FullNet", "ssh.pid"));
                     SetState(ConnectionState.Error);
                     AppendLog("Device-side STOP did not complete. No success has been assumed.");
                 }
@@ -291,11 +305,12 @@ internal sealed class MainForm : Form
             ConnectionState.Error => Color.FromArgb(189, 49, 49),
             _ => Color.FromArgb(75, 86, 100)
         };
-        _connectToggle.Text = T(_state == ConnectionState.Connected
-            ? "Disconnect" : "Connect");
-        _connectToggle.Enabled = !_busy && _engineInstalled && _adbReady
-            && _state is ConnectionState.Ready
-                or ConnectionState.Connected or ConnectionState.Error;
+        _connectToggle.Text = T(ShouldDisconnect ? "Disconnect" : "Connect");
+        bool allowedConnected = _adbReady &&
+            (_state == ConnectionState.Ready || _state == ConnectionState.Connected
+             || _state == ConnectionState.Error);
+        _connectToggle.Enabled = !_busy && _engineInstalled
+            && (allowedConnected || (!_adbReady && _mayHaveActiveSession));
     }
 
     private async void OnFormClosing(object? sender, FormClosingEventArgs e)
