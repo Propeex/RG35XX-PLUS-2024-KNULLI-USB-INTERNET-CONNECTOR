@@ -111,9 +111,11 @@ internal static class AdbProbe
         };
         foreach (string arg in new[] { "-P", DedicatedPort, "kill-server" })
             start.ArgumentList.Add(arg);
+
+        Process? proc = null;
         try
         {
-            using var proc = Process.Start(start);
+            proc = Process.Start(start);
             if (proc is null) return;
             Task<string> output = proc.StandardOutput.ReadToEndAsync(cancel.Token);
             Task<string> error = proc.StandardError.ReadToEndAsync(cancel.Token);
@@ -123,8 +125,16 @@ internal static class AdbProbe
         catch (Exception ex) when (ex is OperationCanceledException or IOException
                 or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            // ADB may already have exited; a failed stop must not crash the GUI.
+            // Reap our own ADB client if kill-server takes too long.
+            try
+            {
+                if (proc is not null && !proc.HasExited)
+                    proc.Kill(entireProcessTree: true);
+            }
+            catch (Exception e) when (e is InvalidOperationException
+                or System.ComponentModel.Win32Exception) { }
         }
+        finally { proc?.Dispose(); }
     }
 
     internal static async Task<bool> HasReadyDeviceAsync(
