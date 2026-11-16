@@ -109,7 +109,7 @@ jobs:
           $helper = (Resolve-Path "artifacts/windows/backend/bin/ssh-askpass.exe").Path
           $psi = [Diagnostics.ProcessStartInfo]::new()
           $psi.FileName = $helper
-          $psi.Arguments = "root@127.0.0.1's password:"
+          $psi.ArgumentList.Add("root@127.0.0.1's password:")
           $psi.UseShellExecute = $false
           $psi.CreateNoWindow = $true
           $psi.RedirectStandardOutput = $true
