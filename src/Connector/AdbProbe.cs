@@ -12,9 +12,9 @@ namespace RG35XXUsbInternetConnector;
 /// </summary>
 internal static class AdbProbe
 {
-    private const string ServerPort = "5056";
+    internal const string ServerPort = "5056";
 
-    internal static async Task<bool> HasReadyDeviceAsync()
+    internal static async Task<bool> HasReadyDeviceAsync(bool keepServer = false)
     {
         if (!File.Exists(AppPaths.AdbPath)) return false;
         try
@@ -25,8 +25,11 @@ internal static class AdbProbe
         }
         finally
         {
-            try { await RunAdbAsync("kill-server"); }
-            catch { /* no daemon to clean up, or already stopped */ }
+            if (!keepServer)
+            {
+                try { await RunAdbAsync("kill-server"); }
+                catch { /* no daemon to clean up, or already stopped */ }
+            }
         }
     }
 
