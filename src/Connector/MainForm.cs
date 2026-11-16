@@ -21,7 +21,7 @@ internal sealed class MainForm : Form
     private readonly Label _logLabel = new();
     private readonly TextBox _log = new();
     private readonly System.Windows.Forms.Timer _statusTimer = new();
-    private readonly LegacyEngineRunner _engine = new();
+    private readonly UsbEngineRunner _engine = new();
 
     private string _selectedLanguage = UiStrings.DefaultLanguage;
     private ConnectionState _state = ConnectionState.Checking;
@@ -44,7 +44,7 @@ internal sealed class MainForm : Form
         BackColor = Color.FromArgb(247, 248, 250);
 
         BuildLayout();
-        _engineInstalled = LegacyEngineBundle.Installed;
+        _engineInstalled = UsbBackendBundle.Installed;
         // A previous GUI instance may have been closed while its SSH tunnel
         // remained alive. Never kill that ADB server merely to poll status.
         _mayHaveActiveSession = File.Exists(Path.Combine(
@@ -56,12 +56,12 @@ internal sealed class MainForm : Form
         foreach (string line in startupLogs) AppendLog(line);
         if (!_engineInstalled)
         {
-            AppendLog("USB backend missing; connection is disabled to protect the device.");
-            AppendLog("Developer preview: place the verified legacy ZIP next to the EXE and restart.");
+            AppendLog("Embedded USB backend missing or invalid; connection is disabled.");
+            AppendLog("This development build has no verified embedded backend. Consult the GitHub build log.");
         }
         else
         {
-            AppendLog("Verified legacy USB backend available (hardware re-test required).");
+            AppendLog("Embedded source-tracked USB backend available (hardware re-test required).");
         }
 
         _statusTimer.Interval = 9000;
@@ -188,7 +188,7 @@ internal sealed class MainForm : Form
             {
                 // The backend already tests native HTTPS. Re-test from an
                 // independent ADB process before displaying Connected.
-                bool healthy = await LegacyEngineRunner.NativeInternetHealthyAsync(
+                bool healthy = await UsbEngineRunner.NativeInternetHealthyAsync(
                     CancellationToken.None);
                 _lastHealthCheck = DateTimeOffset.UtcNow;
                 SetState(healthy ? ConnectionState.Connected : ConnectionState.Error);
@@ -251,7 +251,7 @@ internal sealed class MainForm : Form
             if (_mayHaveActiveSession && DateTimeOffset.UtcNow - _lastHealthCheck
                 > TimeSpan.FromSeconds(35))
             {
-                bool healthy = await LegacyEngineRunner.NativeInternetHealthyAsync(
+                bool healthy = await UsbEngineRunner.NativeInternetHealthyAsync(
                     CancellationToken.None);
                 _lastHealthCheck = DateTimeOffset.UtcNow;
                 if (_closed || IsDisposed || _busy) return;
