@@ -127,7 +127,8 @@ internal static class AdbProbe
         }
     }
 
-    internal static async Task<bool> HasReadyDeviceAsync(bool keepServer = false)
+    internal static async Task<bool> HasReadyDeviceAsync(
+        bool keepServer = false, bool allowFallback = true)
     {
         string preferred = ServerPort;
         var first = await QueryAsync(preferred);
@@ -139,6 +140,16 @@ internal static class AdbProbe
                 "ADB device ready (server " + preferred +
                 (preferred == SharedPort ? ", shared)" : ", app-owned)"));
             return true;
+        }
+
+        // During START/STOP, use only the existing selected ADB server.
+        // Starting another server could disrupt an in-flight SSH forward.
+        if (!allowFallback)
+        {
+            Volatile.Write(ref _lastDiagnostic,
+                "ADB device not ready on server " + preferred +
+                " during USB operation (" + first.State + ").");
+            return false;
         }
 
         if (!keepServer && preferred == DedicatedPort)
