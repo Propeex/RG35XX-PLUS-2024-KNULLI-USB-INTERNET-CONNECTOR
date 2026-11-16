@@ -35,6 +35,8 @@ jobs:
           (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/daemon-launch-arm64 ./cmd/daemon-launch)
           (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/dns-bridge-arm64 ./cmd/dns-bridge)
           (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/tunctl-arm64 ./cmd/tunctl)
+          # Build Windows-subsystem askpass binary: no extra CMD or password dialog.
+          (cd native && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -H=windowsgui" -o ../bundle/bin/ssh-askpass.exe ./cmd/ssh-askpass)
           curl --fail --location --retry 3 --silent --show-error \
             'https://github.com/xjasonlyu/tun2socks/releases/download/v2.7.0/tun2socks-linux-arm64.zip' \
             --output download/tun2socks.zip
@@ -101,6 +103,23 @@ jobs:
           Expand-Archive -Path artifacts/backend-download/backend.zip -DestinationPath artifacts/windows/backend
           Copy-Item docs/PORTABLE_INSTALL_KR.md artifacts/windows/README_KR.md
           if (!(Test-Path artifacts/windows/backend/SHA256SUMS)) { throw 'Missing backend integrity manifest.' }
+      - name: Smoke test hidden Windows SSH askpass helper (offline)
+        shell: pwsh
+        run: |
+          $helper = (Resolve-Path "artifacts/windows/backend/bin/ssh-askpass.exe").Path
+          $psi = [Diagnostics.ProcessStartInfo]::new()
+          $psi.FileName = $helper
+          $psi.Arguments = "root@127.0.0.1's password:"
+          $psi.UseShellExecute = $false
+          $psi.CreateNoWindow = $true
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.EnvironmentVariables['RG35XX_SSH_ASKPASS_VALUE'] = 'test-fixture'
+          $proc = [Diagnostics.Process]::Start($psi)
+          $answer = $proc.StandardOutput.ReadToEnd().Trim()
+          if (-not $proc.WaitForExit(10000) -or $proc.ExitCode -ne 0 -or $answer -ne 'test-fixture') {
+            throw 'Hidden SSH askpass smoke test failed.'
+          }
       - name: Smoke test EXE and portable backend folder (offline)
         shell: pwsh
         run: |
