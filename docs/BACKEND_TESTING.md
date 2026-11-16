@@ -63,3 +63,18 @@ GitHub Actions (Windows compiler, Windows PowerShell parser, embedded SHA-256 va
 Before a GitHub prerelease, confirm real-device startup, connect, stop, restart, stale state cleanup, IP display, native HTTPS, ScreenScraper, themes and PortMaster. Then validate Google Platform-Tools bootstrap and at least one GitHub EXE auto-update/restart and rollback case.
 
 See [issue #4](../issues/4), [roadmap](ROADMAP.md), [architecture](ARCHITECTURE.md) and [development log](DEVELOPMENT_LOG.md).
+
+
+### Final manual regression order (after PR #10 CI)
+
+Use a **freshly extracted** `windows-portable-zip` from the latest PR workflow; do **not** test an older Actions artifact. Back up the known-working directory first. Leave the existing portable installation untouched, and use one GUI instance at a time.
+
+1. **First-run locale:** remove only test-folder initialization/settings markers (do not delete a production folder). Launch and confirm the only text is `Language` plus KO/EN/JA choice names. Choose Korean, then repeat clean-folder tests in English and Japanese. Every visible setup/SDK prompt and progress description must honor the choice. Technical backend messages are intentionally in English after the GUI appears.
+2. **USB detection:** without USB, device label is gray/disconnected and Internet label absent. Connect KNULLI with ADB enabled; device becomes green/connected and Internet red/disconnected. Unplug and replug to verify status transitions; no automatic Internet connection should occur.
+3. **First manual START:** click Connect once and observe live English checkpoints `Stage USB forwarding`, `Stage SSH/SOCKS`, `Stage device payload`, `Stage TUN/DNS`, `Stage native HTTPS`, and `Stage compatibility`. Record `USB action elapsed: ... seconds`. No green Internet badge unless an independent native HTTPS check succeeds.
+4. **Manual STOP:** click Disconnect once. Look for `STOP verification 1/4: active=False; rgusb0=False` (or a later retry with both False), then `STOP completed and verified`. Device stays green; Internet turns red. Repeat START→STOP once more to detect stale resources.
+5. **Normal cancellation:** if a connection attempt is in flight, unplug once and confirm the action cancels without automatic retry. Reconnect physically, allow ADB to become ready, and **manually** begin again (a stale SSH marker may need an explicit Disconnect first). Do not intentionally interrupt firmware storage writes.
+6. **App session:** close/reopen the EXE. The Activity Log view starts fresh, current language remains selected, and the program should not automatically Connect. Attempt to launch a second GUI simultaneously; it should refuse without disrupting the first.
+7. **Updater:** stage two trusted signed/versioned test releases in a controlled test directory to verify successful upgrade, deliberate corrupt-new-EXE rejection, and preservation of `data/` and `platform-tools/`. This cannot be proven by ZIP smoke tests alone. Do not create the public beta until the physical START/STOP passes.
+
+Retain the `%LOCALAPPDATA%\\RG35XXUsbInternetConnector\\backend-logs` START/STOP files for developer analysis if the test fails. Never include SSH private keys, complete device serials, or unredacted sensitive paths in reports.
