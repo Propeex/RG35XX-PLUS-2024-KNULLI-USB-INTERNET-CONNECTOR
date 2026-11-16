@@ -6,12 +6,16 @@ namespace RG35XXUsbInternetConnector;
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--apply-update")
+        {
+            // This is launched from an isolated temporary COPY of the old EXE
+            // only after the new GitHub EXE has passed SHA-256 verification.
+            UpdateWorker.Apply(args);
+            return;
+        }
         ApplicationConfiguration.Initialize();
-
-        // Every launch finishes dependency checks BEFORE the main window exists.
-        // Only a first-time install shows a determinate download progress bar.
         Application.Run(new BootstrapForm());
     }
 }
