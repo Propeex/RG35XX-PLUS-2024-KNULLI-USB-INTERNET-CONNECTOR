@@ -152,9 +152,8 @@ internal static class AdbProbe
             return false;
         }
 
-        if (!keepServer && preferred == DedicatedPort)
-            await StopDedicatedAsync();
-
+        // Probe both servers without repeatedly killing the dedicated one.
+        // Repeated stop/start cycles caused USB readiness flicker.
         string alternative = preferred == DedicatedPort ? SharedPort : DedicatedPort;
         var second = await QueryAsync(alternative);
         if (second.Ready)
@@ -165,9 +164,6 @@ internal static class AdbProbe
                 (alternative == SharedPort ? ", shared; reused existing ADB)" : ", app-owned)"));
             return true;
         }
-        if (alternative == DedicatedPort && !keepServer)
-            await StopDedicatedAsync();
-
         string reason = first.State == "multiple" || second.State == "multiple"
             ? "Multiple authorized ADB devices detected; disconnect other devices."
             : first.State == "unauthorized" || second.State == "unauthorized"
