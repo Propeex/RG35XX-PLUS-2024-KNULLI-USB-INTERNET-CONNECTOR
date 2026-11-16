@@ -19,6 +19,11 @@ jobs:
         with:
           go-version: '1.23.x'
           cache-dependency-path: native/go.mod
+      - name: Check POSIX shell script syntax
+        run: |
+          for script in native/device/*.sh; do
+            sh -n "$script"
+          done
       - name: Test native Go sources
         working-directory: native
         run: go test ./...
