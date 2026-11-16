@@ -140,6 +140,7 @@ function StopOwnedSSH() {
     }
     # Never kill another SSH process due to PID reuse.
     Remove-Item -LiteralPath (Join-Path $script:state 'ssh.pid') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $script:state 'adb-port.txt') -Force -ErrorAction SilentlyContinue
 }
 function StopOwnedAdb() {
     # The standard 5037 daemon may be owned by an IDE or another app.
@@ -215,6 +216,7 @@ function StartSSH() {
     for ($i=0; $i -lt 18; $i++) {
         Start-Sleep -Seconds 2
         if (CheckSocks) {
+            [IO.File]::WriteAllText((Join-Path $script:state 'adb-port.txt'),$script:port)
             Log 'Background SSH reverse SOCKS tunnel verified.'
             return
         }
