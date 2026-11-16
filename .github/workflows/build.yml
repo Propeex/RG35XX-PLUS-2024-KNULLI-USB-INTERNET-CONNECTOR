@@ -89,6 +89,13 @@ jobs:
         with:
           name: embedded-backend-development-payload
           path: artifacts/backend-download/
+      - name: Generate multi-resolution icon for both Windows executables
+        shell: pwsh
+        run: |
+          ./scripts/Build-AppIcon.ps1
+          if (!(Test-Path assets/knulli-usb-link.ico)) {
+            throw 'App icon generation failed.'
+          }
       - name: Restore
         run: dotnet restore src/Connector/Connector.csproj
       - name: Build
@@ -101,10 +108,11 @@ jobs:
           $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
           if (!(Test-Path $csc)) { throw 'Windows .NET Framework compiler not available.' }
           $launcherSource = (Resolve-Path '.\\src\\Launcher\\Launcher.cs').Path
-          $launcherOutput = Join-Path (Resolve-Path '.\\artifacts\\windows').Path 'RG35XX-Start.exe'
-          & $csc /nologo /target:winexe /platform:x64 "/out:$launcherOutput" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.dll $launcherSource
+          $launcherOutput = Join-Path (Resolve-Path '.\\artifacts\\windows').Path 'KNULLI USB Link.exe'
+          $icon = (Resolve-Path 'assets/knulli-usb-link.ico').Path
+          & $csc /nologo /target:winexe /platform:x64 "/out:$launcherOutput" "/win32icon:$icon" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.dll $launcherSource
           if ($LASTEXITCODE -ne 0) { throw 'Lightweight launcher compilation failed.' }
-          $launcher = (Resolve-Path 'artifacts/windows/RG35XX-Start.exe').Path
+          $launcher = (Resolve-Path 'artifacts/windows/KNULLI USB Link.exe').Path
           $p = Start-Process -FilePath $launcher -ArgumentList '--self-test' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw 'Lightweight first-run launcher self-test failed.' }
       - name: Assemble portable program folder
