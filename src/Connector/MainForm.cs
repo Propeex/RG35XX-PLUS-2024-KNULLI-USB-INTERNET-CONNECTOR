@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,9 +7,9 @@ using System.Windows.Forms;
 namespace RG35XXUsbInternetConnector;
 
 /// <summary>
-/// Minimal main UI. Never display update progress here: updates finish in
-/// BootstrapForm before this window is constructed.
-/// The network engine is not migrated yet, so the toggle is intentionally disabled.
+/// One-button UI for the transitional, SHA-pinned legacy USB engine.
+/// Never represents ADB presence or an active marker as proven Internet health.
+/// No update progress appears here: BootstrapForm finishes startup first.
 /// </summary>
 internal sealed class MainForm : Form
 {
@@ -22,11 +21,18 @@ internal sealed class MainForm : Form
     private readonly Label _logLabel = new();
     private readonly TextBox _log = new();
     private readonly System.Windows.Forms.Timer _statusTimer = new();
+    private readonly LegacyEngineRunner _engine = new();
 
     private string _selectedLanguage = UiStrings.DefaultLanguage;
     private ConnectionState _state = ConnectionState.Checking;
+    private bool _engineInstalled;
+    private bool _adbReady;
+    private bool _busy;
+    private bool _closingAfterStop;
+    private bool _mayHaveActiveSession;
     private int _polling;
     private bool _closed;
+    private DateTimeOffset _lastHealthCheck = DateTimeOffset.MinValue;
 
     internal MainForm(IReadOnlyList<string> startupLogs)
     {
@@ -38,24 +44,34 @@ internal sealed class MainForm : Form
         BackColor = Color.FromArgb(247, 248, 250);
 
         BuildLayout();
+        _engineInstalled = LegacyEngineBundle.Installed;
         _language.SelectedIndex = 0;
         ApplyLanguage();
 
-        _connectToggle.Enabled = false; // Enable only after issue #4 is complete.
         foreach (string line in startupLogs) AppendLog(line);
-        AppendLog("GUI ready. Real USB network engine integration pending (#4).");
+        if (!_engineInstalled)
+        {
+            AppendLog("USB backend missing; connection is disabled to protect the device.");
+            AppendLog("Developer preview: place the verified legacy ZIP next to the EXE and restart.");
+        }
+        else
+        {
+            AppendLog("Verified legacy USB backend available (hardware re-test required).");
+        }
 
-        _statusTimer.Interval = 7000;
+        _statusTimer.Interval = 9000;
         _statusTimer.Tick += async (_, _) => await PollDeviceAsync();
         Shown += async (_, _) =>
         {
             await PollDeviceAsync();
             if (!_closed) _statusTimer.Start();
         };
-        FormClosing += (_, _) =>
+        FormClosing += OnFormClosing;
+        FormClosed += (_, _) =>
         {
             _closed = true;
             _statusTimer.Stop();
+            _statusTimer.Dispose();
         };
     }
 
@@ -70,20 +86,22 @@ internal sealed class MainForm : Form
         _languageLabel.Location = new Point(564, 23);
         _languageLabel.Size = new Size(74, 30);
         _languageLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _languageLabel.Text = "Language";
         Controls.Add(_languageLabel);
 
         _language.DropDownStyle = ComboBoxStyle.DropDownList;
         _language.Location = new Point(637, 18);
         _language.Size = new Size(101, 32);
         _language.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        foreach (var item in UiStrings.Languages) _language.Items.Add(item.Display);
+        foreach (var language in UiStrings.Languages)
+            _language.Items.Add(language.Display);
         _language.SelectedIndexChanged += (_, _) =>
         {
             int selected = _language.SelectedIndex;
             if (selected < 0) return;
             _selectedLanguage = UiStrings.Languages[selected].Code;
             ApplyLanguage();
-            AppendLog($"Language switched to {_selectedLanguage}.");
+            AppendLog("Language switched to " + _selectedLanguage + ".");
         };
         Controls.Add(_language);
 
@@ -100,12 +118,12 @@ internal sealed class MainForm : Form
         _connectToggle.FlatStyle = FlatStyle.Flat;
         _connectToggle.FlatAppearance.BorderSize = 0;
         _connectToggle.Font = new Font("Segoe UI", 13F, FontStyle.Bold);
-        _connectToggle.Click += (_, _) =>
-        {
-            AppendLog("Connect/Disconnect requires tested KNULLI network engine (#4).");
-        };
+        _connectToggle.Click += async (_, _) =>
+            await RunActionAsync(_state == ConnectionState.Connected
+                ? EngineAction.Stop : EngineAction.Start, false);
         Controls.Add(_connectToggle);
 
+        _logLabel.Text = "Activity Log";
         _logLabel.Location = new Point(24, 227);
         _logLabel.Size = new Size(290, 28);
         _logLabel.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
@@ -122,23 +140,128 @@ internal sealed class MainForm : Form
         _log.Font = new Font("Consolas", 9F);
         Controls.Add(_log);
 
-        Resize += (_, _) => _connectToggle.Left = (ClientSize.Width - _connectToggle.Width) / 2;
+        Resize += (_, _) =>
+            _connectToggle.Left = (ClientSize.Width - _connectToggle.Width) / 2;
+    }
+
+    private async Task RunActionAsync(EngineAction action, bool closeAfterStop)
+    {
+        if (_busy || !_engineInstalled || !_adbReady) return;
+        _busy = true;
+        _statusTimer.Stop();
+        SetState(action == EngineAction.Start
+            ? ConnectionState.Connecting : ConnectionState.Disconnecting);
+        try
+        {
+            if (action == EngineAction.Start) _mayHaveActiveSession = true;
+            var outcome = await _engine.RunAsync(action, AppendLog, CancellationToken.None);
+            if (action == EngineAction.Stop)
+            {
+                if (!outcome.Success)
+                {
+                    SetState(ConnectionState.Error);
+                    AppendLog("Device-side STOP did not complete. No success has been assumed.");
+                }
+                else
+                {
+                    _mayHaveActiveSession = false;
+                    _lastHealthCheck = DateTimeOffset.MinValue;
+                    SetState(ConnectionState.Ready);
+                    AppendLog("USB internet session disconnected; app ADB tunnel stopped.");
+                }
+            }
+            else if (outcome.Success)
+            {
+                // The backend already tests native HTTPS. Re-test from an
+                // independent ADB process before displaying Connected.
+                bool healthy = await LegacyEngineRunner.NativeInternetHealthyAsync(
+                    CancellationToken.None);
+                _lastHealthCheck = DateTimeOffset.UtcNow;
+                SetState(healthy ? ConnectionState.Connected : ConnectionState.Error);
+                if (!healthy)
+                    AppendLog("Backend returned success but independent native HTTPS failed.");
+            }
+            else
+            {
+                SetState(ConnectionState.Error);
+            }
+
+            if (closeAfterStop && action == EngineAction.Stop && outcome.Success)
+            {
+                _closingAfterStop = true;
+                Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            SetState(ConnectionState.Error);
+            AppendLog("USB backend action failed: " + ex.GetType().Name);
+            AppendLog("Details: " + ex.Message);
+            if (closeAfterStop)
+                MessageBox.Show(this, "STOP failed; the connection might still be active.",
+                    "USB Internet", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _busy = false;
+            ApplyLanguage();
+            if (!_closed && !_closingAfterStop) _statusTimer.Start();
+        }
     }
 
     private async Task PollDeviceAsync()
     {
-        if (Interlocked.Exchange(ref _polling, 1) != 0) return;
+        if (_busy || _closed || Interlocked.Exchange(ref _polling, 1) != 0) return;
         try
         {
-            var connected = await AdbProbe.HasReadyDeviceAsync();
-            if (_closed || IsDisposed) return;
-            SetState(connected ? ConnectionState.Ready : ConnectionState.Disconnected);
+            // Never kill the ADB server when SSH forwarding depends on it.
+            bool keepAdbServer = _mayHaveActiveSession
+                || _state == ConnectionState.Connected;
+            bool ready = await AdbProbe.HasReadyDeviceAsync(keepAdbServer);
+            if (_closed || IsDisposed || _busy) return;
+            _adbReady = ready;
+
+            if (!ready)
+            {
+                if (_state == ConnectionState.Connected)
+                    AppendLog("USB device was disconnected; native Internet is no longer verified.");
+                SetState(ConnectionState.Disconnected);
+                return;
+            }
+            if (!_engineInstalled)
+            {
+                SetState(ConnectionState.NotReady);
+                return;
+            }
+
+            if (_mayHaveActiveSession && DateTimeOffset.UtcNow - _lastHealthCheck
+                > TimeSpan.FromSeconds(35))
+            {
+                bool healthy = await LegacyEngineRunner.NativeInternetHealthyAsync(
+                    CancellationToken.None);
+                _lastHealthCheck = DateTimeOffset.UtcNow;
+                if (_closed || IsDisposed || _busy) return;
+                if (_state == ConnectionState.Connected && !healthy)
+                {
+                    SetState(ConnectionState.Error);
+                    AppendLog("Native Internet health check failed. Select Connect to attempt recovery.");
+                }
+                else if (healthy && _state != ConnectionState.Connected)
+                {
+                    SetState(ConnectionState.Connected);
+                    AppendLog("Native Internet health check succeeded.");
+                }
+            }
+            else if (!_mayHaveActiveSession)
+            {
+                SetState(ConnectionState.Ready);
+            }
         }
         catch (Exception ex)
         {
             if (_closed || IsDisposed) return;
             SetState(ConnectionState.Error);
-            AppendLog("ADB polling failed: " + ex.GetType().Name);
+            AppendLog("ADB device probe failed: " + ex.GetType().Name);
         }
         finally
         {
@@ -151,16 +274,16 @@ internal sealed class MainForm : Form
         if (_state != next)
         {
             _state = next;
-            AppendLog("Device state changed: " + next);
+            AppendLog("Connection state changed: " + next);
         }
         ApplyLanguage();
     }
 
     private void ApplyLanguage()
     {
+        if (IsDisposed) return;
         string T(string key) => UiStrings.Get(_selectedLanguage, key);
         _title.Text = T("Title");
-        _languageLabel.Text = "Language";
         _status.Text = T("StatusPrefix") + ": " + T(_state.ToString());
         _status.ForeColor = _state switch
         {
@@ -168,12 +291,50 @@ internal sealed class MainForm : Form
             ConnectionState.Error => Color.FromArgb(189, 49, 49),
             _ => Color.FromArgb(75, 86, 100)
         };
-        _connectToggle.Text = T(_state == ConnectionState.Connected ? "Disconnect" : "Connect");
-        _logLabel.Text = "Activity Log";
+        _connectToggle.Text = T(_state == ConnectionState.Connected
+            ? "Disconnect" : "Connect");
+        _connectToggle.Enabled = !_busy && _engineInstalled && _adbReady
+            && _state is ConnectionState.Ready
+                or ConnectionState.Connected or ConnectionState.Error;
+    }
+
+    private async void OnFormClosing(object? sender, FormClosingEventArgs e)
+    {
+        if (_closingAfterStop) return;
+        if (_busy)
+        {
+            e.Cancel = true;
+            MessageBox.Show(this, "A USB operation is still running.",
+                "USB Internet", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (!_mayHaveActiveSession) return;
+
+        // Do not silently strand SSH forwards when the GUI is closed.
+        var answer = MessageBox.Show(this,
+            "Disconnect USB internet before exiting?\n\n" +
+            "Yes: Disconnect safely and exit.\n" +
+            "No: Keep the connection running in the background.\n" +
+            "Cancel: Return to the application.",
+            "USB Internet", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+        if (answer == DialogResult.Cancel)
+        {
+            e.Cancel = true;
+            return;
+        }
+        if (answer == DialogResult.No) return;
+        e.Cancel = true;
+        await RunActionAsync(EngineAction.Stop, closeAfterStop: true);
     }
 
     private void AppendLog(string message)
     {
+        if (_closed || IsDisposed) return;
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => AppendLog(message)));
+            return;
+        }
         if (_log.TextLength > 0) _log.AppendText(Environment.NewLine);
         _log.AppendText($"[{DateTimeOffset.Now:HH:mm:ss}] {message}");
     }
