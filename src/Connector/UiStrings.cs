@@ -20,7 +20,7 @@ internal static class UiStrings
         {
             ["ko-KR"] = new Dictionary<string, string>
             {
-                ["Title"] = "RG35XX+ (2024) KNULLI USB Internet Connector",
+                ["Title"] = "KNULLI USB Link · RG35XX+ (2024)",
                 ["Language"] = "언어",
                 ["StatusPrefix"] = "상태",
                 ["DeviceLabel"] = "기기 연결:",
@@ -52,7 +52,7 @@ internal static class UiStrings
             },
             ["en-US"] = new Dictionary<string, string>
             {
-                ["Title"] = "RG35XX+ (2024) KNULLI USB Internet Connector",
+                ["Title"] = "KNULLI USB Link · RG35XX+ (2024)",
                 ["Language"] = "Language",
                 ["StatusPrefix"] = "Status",
                 ["DeviceLabel"] = "Device:",
@@ -84,7 +84,7 @@ internal static class UiStrings
             },
             ["ja-JP"] = new Dictionary<string, string>
             {
-                ["Title"] = "RG35XX+ (2024) KNULLI USB Internet Connector",
+                ["Title"] = "KNULLI USB Link · RG35XX+ (2024)",
                 ["Language"] = "言語",
                 ["StatusPrefix"] = "状態",
                 ["DeviceLabel"] = "デバイス:",
