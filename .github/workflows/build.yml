@@ -118,7 +118,13 @@ jobs:
           $exe = (Resolve-Path ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe").Path
           $zip = (Resolve-Path ".\\dist\\RG35XX-USB-Internet-Connector-dev.zip").Path
           $proc = Start-Process -FilePath $exe -ArgumentList @('--verify-package', ('"' + $zip + '"')) -Wait -PassThru
-          if ($proc.ExitCode -ne 0) { throw "Portable ZIP failed updater validation with exit code $($proc.ExitCode)" }
+          if ($proc.ExitCode -ne 0) {
+            if (Test-Path artifacts/windows/package-verification-error.txt) {
+              Get-Content artifacts/windows/package-verification-error.txt
+            }
+            Get-ChildItem artifacts/windows -Force | Select-Object Name,Length | Format-Table
+            throw "Portable ZIP failed updater validation with exit code $($proc.ExitCode)"
+          }
       - name: Upload portable ZIP (NOT a GitHub Release)
         uses: actions/upload-artifact@v4
         with:
