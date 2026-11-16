@@ -27,8 +27,9 @@ jobs:
       - name: Smoke test published EXE (no network or GUI)
         shell: pwsh
         run: |
-          & ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe" --self-test
-          if ($LASTEXITCODE -ne 0) { throw "Self-test failed with exit code $LASTEXITCODE" }
+          $exe = (Resolve-Path ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe").Path
+          $proc = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Self-test failed with exit code $($proc.ExitCode)" }
       - name: Save test build (NOT a GitHub Release)
         uses: actions/upload-artifact@v4
         with:
