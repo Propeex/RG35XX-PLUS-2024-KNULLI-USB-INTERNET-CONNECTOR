@@ -24,6 +24,11 @@ jobs:
         run: dotnet build src/Connector/Connector.csproj --no-restore --configuration Release
       - name: Publish self-contained Windows EXE
         run: dotnet publish src/Connector/Connector.csproj --no-restore --configuration Release --runtime win-x64 -p:PublishSingleFile=true -p:SelfContained=true --output artifacts/windows
+      - name: Smoke test published EXE (no network or GUI)
+        shell: pwsh
+        run: |
+          & ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Self-test failed with exit code $LASTEXITCODE" }
       - name: Save test build (NOT a GitHub Release)
         uses: actions/upload-artifact@v4
         with:
