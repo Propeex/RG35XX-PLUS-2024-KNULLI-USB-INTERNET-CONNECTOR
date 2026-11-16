@@ -45,25 +45,41 @@ internal sealed class StartupService
         Action<string> log,
         CancellationToken cancellation)
     {
-        progress.Report(new StartupStep("Checking application releases..."));
-        try
+        // A previous GUI may have been closed while its app-owned SSH tunnel
+        // stayed active. Never replace a running adb.exe or restart the app
+        // updater while this marker is present; let the user Disconnect first.
+        bool legacyTunnelMayBeActive = File.Exists(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RG35XX_USB_FullNet", "ssh.pid"));
+
+        if (legacyTunnelMayBeActive)
         {
-            if (await SelfUpdateService.CheckAndLaunchAsync(progress, log, cancellation))
-            {
-                // Do not initialize Platform-Tools in an EXE being replaced.
-                return true;
-            }
+            log("Application and Platform-Tools updates deferred: owned SSH tunnel may still be active.");
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
-                or JsonException or InvalidOperationException or IOException
-                or UnauthorizedAccessException or CryptographicException)
+        else
         {
-            // A failed GitHub update must not take away the existing application.
-            log("GitHub release check/update skipped: " + ex.Message);
+            progress.Report(new StartupStep("Checking application releases..."));
+            try
+            {
+                if (await SelfUpdateService.CheckAndLaunchAsync(progress, log, cancellation))
+                {
+                    // Do not initialize Platform-Tools in an EXE being replaced.
+                    return true;
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+                    or JsonException or InvalidOperationException or IOException
+                    or UnauthorizedAccessException or CryptographicException)
+            {
+                log("GitHub release check/update skipped: " + ex.Message);
+            }
         }
 
         progress.Report(new StartupStep("Checking Android Platform-Tools..."));
-        await PlatformToolsService.EnsureInstalledAsync(progress, log, cancellation);
+        if (legacyTunnelMayBeActive && File.Exists(AppPaths.AdbPath))
+            log("Reusing Platform-Tools while existing SSH tunnel may still be active.");
+        else
+            await PlatformToolsService.EnsureInstalledAsync(progress, log, cancellation);
 
         if (!File.Exists(AppPaths.AdbPath))
             throw new FileNotFoundException("Platform-Tools installation finished without adb.exe.");
