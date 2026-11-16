@@ -107,6 +107,30 @@ jobs:
           $exe = (Resolve-Path ".\artifacts\windows\RG35XXUsbInternetConnector.exe").Path
           $proc = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Self-test failed with exit code $($proc.ExitCode)" }
+      - name: Verify headless OpenSSH password helper (no SSH server needed)
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe").Path
+          $psi = [Diagnostics.ProcessStartInfo]::new()
+          $psi.FileName = $exe
+          $psi.UseShellExecute = $false
+          $psi.CreateNoWindow = $true
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.ArgumentList.Add("root@127.0.0.1's password:")
+          $psi.Environment["RG35XX_USB_SSH_ASKPASS"] = "1"
+          $p = [Diagnostics.Process]::Start($psi)
+          try {
+            if (!$p.WaitForExit(15000)) {
+              $p.Kill($true)
+              throw "Password helper failed to exit."
+            }
+            $answer = $p.StandardOutput.ReadToEnd().Trim()
+            if ($p.ExitCode -ne 0 -or $answer -ne "linux") {
+              throw "Headless password helper failed without a user-visible prompt."
+            }
+            Write-Host "Headless SSH_ASKPASS helper responds through stdout successfully."
+          } finally { $p.Dispose() }
       - name: Package portable ZIP distribution
         shell: pwsh
         run: |
