@@ -8,6 +8,13 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // ssh.exe launches this same single-file WinExe as its SSH_ASKPASS
+        // helper. Handle it before the GUI and mutex without displaying UI.
+        if (Environment.GetEnvironmentVariable(SshPasswordBridge.ModeVariable) == "1")
+        {
+            Environment.ExitCode = SshPasswordBridge.Respond(args);
+            return;
+        }
         if (args.Length == 1 && args[0] == "--self-test")
         {
             Environment.ExitCode = SelfTests.Run();
