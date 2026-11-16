@@ -14,8 +14,14 @@ internal static class SelfTests
     {
         try
         {
-            Assert(UsbBackendBundle.VerifyEmbedded(out string backendError),
-                "embedded backend integrity: " + backendError);
+            Assert(UsbBackendBundle.VerifyDistribution(out string backendError),
+                "portable backend integrity: " + backendError);
+            Assert(AdbProbe.HasReadyDevice("0123456789     device product:occam model:Nexus_4"),
+                "accept whitespace-separated ADB device line");
+            Assert(AdbProbe.HasReadyDevice("0123456789\tdevice product:occam"),
+                "accept tab-separated ADB device line");
+            Assert(!AdbProbe.HasReadyDevice("0123456789 unauthorized"),
+                "do not treat unauthorized device as ready");
             Assert(SemVersion.TryParse("v0.1.0-beta.1", out var beta1), "parse beta1");
             Assert(SemVersion.TryParse("0.1.0-beta.2", out var beta2), "parse beta2");
             Assert(SemVersion.TryParse("v0.1.0", out var stable), "parse stable");

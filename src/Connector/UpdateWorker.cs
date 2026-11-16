@@ -1,13 +1,12 @@
-using System;
 using System.Diagnostics;
-using System.Security.Cryptography;
 
 namespace RG35XXUsbInternetConnector;
 
 /// <summary>
-/// Runs from a temporary COPY of the old EXE, so the actual target EXE is
-/// not locked. Launches a verified replacement and retains a backup.
-/// All operations use the same Windows user (no elevation).
+/// A temporary copy of the old EXE applies a verified portable update after
+/// the parent exits. The program EXE/backend are replaced as one logical
+/// transaction; Google Platform-Tools and user data are never touched.
+/// Failed installs restore the old EXE/backend and keep a backup.
 /// </summary>
 internal static class UpdateWorker
 {
@@ -20,59 +19,87 @@ internal static class UpdateWorker
                 throw new ArgumentException("Invalid updater arguments.");
 
             string target = Path.GetFullPath(args[2]);
-            string downloaded = Path.GetFullPath(args[3]);
-            string expectedSha = args[4];
-            string downloadDir = Path.GetFullPath(Path.Combine(AppPaths.BaseDirectory, "updates"));
-            string downloadPrefix = downloadDir + Path.DirectorySeparatorChar;
-            if (!string.Equals(Path.GetFileName(target), "RG35XXUsbInternetConnector.exe",
-                    StringComparison.OrdinalIgnoreCase)
-                || !downloaded.StartsWith(downloadPrefix, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(Path.GetExtension(downloaded), ".exe",
-                    StringComparison.OrdinalIgnoreCase)
-                || expectedSha.Length != 64 || !expectedSha.All(Uri.IsHexDigit))
-                throw new InvalidOperationException("Updater target validation failed.");
+            string stage = Path.GetFullPath(args[3]);
+            string exeHash = args[4];
+            if (!string.Equals(Path.GetFileName(target), PortableUpdatePackage.Executable,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Updater target must be the connector EXE.");
+            string root = Path.GetDirectoryName(target)
+                ?? throw new InvalidOperationException("Updater root is missing.");
+            PortableUpdatePackage.ValidateStageForWorker(stage, root, exeHash);
 
+            // Parent must be fully gone to avoid Windows file locks.
             try
             {
-                using var old = Process.GetProcessById(oldPid);
-                if (!old.WaitForExit(30000))
-                    throw new TimeoutException("Application did not exit before update.");
+                using var previous = Process.GetProcessById(oldPid);
+                if (!previous.WaitForExit(30000))
+                    throw new TimeoutException("Old application did not exit in time.");
             }
             catch (ArgumentException)
             {
-                // Parent is already gone, which is an expected success case.
+                // Process already gone; expected.
             }
 
-            // Revalidate before replacing, even though the parent already checked it.
-            using (var file = File.OpenRead(downloaded))
-            {
-                var hash = SHA256.HashData(file);
-                if (!CryptographicOperations.FixedTimeEquals(hash,
-                        Convert.FromHexString(expectedSha)))
-                    throw new InvalidDataException("Update SHA-256 mismatch.");
-            }
+            PortableUpdatePackage.ValidateStageForWorker(stage, root, exeHash);
+            string oldBackend = Path.Combine(root, "backend");
+            if (!Directory.Exists(oldBackend))
+                throw new InvalidOperationException("Existing backend missing. Update cancelled.");
 
-            string backup = target + ".previous";
-            // Keep exactly one previous working version for manual recovery.
-            File.Copy(target, backup, overwrite: true);
-
-            bool replaced = false;
+            string backupFolder = Path.Combine(root, "data", "update-backups",
+                DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" +
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(backupFolder);
+            string savedExe = Path.Combine(backupFolder, PortableUpdatePackage.Executable);
+            string savedBackend = Path.Combine(backupFolder, "backend");
+            File.Copy(target, savedExe);
+            bool oldBackendMoved = false;
+            bool newBackendMoved = false;
+            bool exeReplaced = false;
             try
             {
-                File.Move(downloaded, target, overwrite: true);
-                replaced = true;
-                using var relaunched = Process.Start(new ProcessStartInfo(target)
+                Directory.Move(oldBackend, savedBackend);
+                oldBackendMoved = true;
+                Directory.Move(Path.Combine(stage, "backend"), oldBackend);
+                newBackendMoved = true;
+                File.Copy(Path.Combine(stage, PortableUpdatePackage.Executable), target,
+                    overwrite: true);
+                exeReplaced = true;
+
+                string readme = Path.Combine(stage, "README_KR.md");
+                if (File.Exists(readme))
+                {
+                    try { File.Copy(readme, Path.Combine(root, "README_KR.md"), overwrite: true); }
+                    catch (IOException) { /* optional documentation; never break upgrade */ }
+                }
+
+                using var updated = Process.Start(new ProcessStartInfo(target)
                 {
                     UseShellExecute = true,
-                    WorkingDirectory = Path.GetDirectoryName(target)!
-                }) ?? throw new InvalidOperationException("Could not relaunch updated EXE.");
-                File.WriteAllText(logFile, "Update applied and updated EXE launched.\n");
+                    WorkingDirectory = root
+                }) ?? throw new InvalidOperationException("Updated EXE could not restart.");
+
+                Directory.CreateDirectory(AppPaths.BaseDirectory);
+                File.WriteAllText(logFile,
+                    "Portable update launched successfully. Previous EXE and backend backed up.\n");
             }
             catch
             {
-                // If the new process failed to start, restore the known-good EXE.
-                if (replaced) File.Copy(backup, target, overwrite: true);
+                // Restore the original cohesive pair on any failure to replace
+                // or launch the new program.
+                if (exeReplaced || File.Exists(savedExe))
+                    File.Copy(savedExe, target, overwrite: true);
+                if (newBackendMoved && Directory.Exists(oldBackend))
+                    Directory.Delete(oldBackend, recursive: true);
+                if (oldBackendMoved && Directory.Exists(savedBackend))
+                    Directory.Move(savedBackend, oldBackend);
                 throw;
+            }
+            finally
+            {
+                if (Directory.Exists(stage))
+                {
+                    try { Directory.Delete(stage, recursive: true); } catch (IOException) { }
+                }
             }
         }
         catch (Exception ex)
@@ -80,11 +107,11 @@ internal static class UpdateWorker
             try
             {
                 Directory.CreateDirectory(AppPaths.BaseDirectory);
-                File.WriteAllText(logFile, "Update failed: " + ex.GetType().Name +
-                    " — " + ex.Message + Environment.NewLine);
+                File.WriteAllText(logFile,
+                    "Portable update failed: " + ex.GetType().Name + " — " +
+                    ex.Message + Environment.NewLine);
             }
-            catch { /* cannot show a console from a WinExe worker */ }
-            // The original EXE remains available for manual retry.
+            catch { /* keep original installation intact when possible */ }
         }
     }
 }

@@ -140,12 +140,18 @@ function StopOwnedSSH() {
     }
     # Never kill another SSH process due to PID reuse.
     Remove-Item -LiteralPath (Join-Path $script:state 'ssh.pid') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $script:state 'adb-port.txt') -Force -ErrorAction SilentlyContinue
 }
 function StopOwnedAdb() {
-    # Dedicated 5056 server. Do not kill a different application using port 5037.
+    # The standard 5037 daemon may be owned by an IDE or another app.
+    # Never stop it. Only port 5056 is connector-managed.
+    if ($script:port -ne '5056') {
+        Log 'Shared ADB port 5037 preserved; other clients may be using it.'
+        return
+    }
     try {
         [void](RunAdb @('kill-server'))
-        Log 'Requested shutdown of connector-specific ADB server.'
+        Log 'Requested shutdown of connector-specific ADB server on 5056.'
     } catch {
         Log ("ADB server stop warning: " + $_.Exception.Message)
     }
@@ -210,6 +216,7 @@ function StartSSH() {
     for ($i=0; $i -lt 18; $i++) {
         Start-Sleep -Seconds 2
         if (CheckSocks) {
+            [IO.File]::WriteAllText((Join-Path $script:state 'adb-port.txt'),$script:port)
             Log 'Background SSH reverse SOCKS tunnel verified.'
             return
         }

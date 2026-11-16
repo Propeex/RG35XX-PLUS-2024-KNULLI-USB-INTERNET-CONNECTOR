@@ -49,7 +49,7 @@ All code changes should be visible in GitHub commits or PRs, and each tested mil
 
 ## Source status
 
-Current source includes the **tracked Windows PowerShell orchestrator**, KNULLI shell scripts, and reproducible Go ARM64 helpers. GitHub Actions assembles a SHA-256 verified backend with upstream MIT-licensed tun2socks v2.7.0, embeds it in a self-contained Windows EXE, and runs offline build/syntax/integrity checks. **Do not advertise it as fully working until real-device tests pass.**
+Current source includes the **tracked Windows PowerShell orchestrator**, KNULLI shell scripts, and reproducible Go ARM64 helpers. GitHub Actions assembles a SHA-256 verified `backend/` directory with upstream MIT-licensed tun2socks v2.7.0 and packages it **beside a portable Windows EXE in a ZIP**. CI checks source syntax, hashes and build integrity. **Do not advertise it as fully working until real-device tests pass.**
 
 ## License
 
@@ -62,10 +62,14 @@ To be determined after auditing the legacy backend and bundled dependencies. Do 
 3. **Never include any update progress controls in the main interface.** The main interface contains the title, language selector, real-time connection status, one central connect/disconnect button and an English log only.
 4. As of the merged GUI foundation (PR #6), self-update and official SDK installation code **build and pass offline smoke tests in Windows CI, but require fresh-Windows and real-device validation**, and the USB network engine is still pending. Do not mistake a development build artifact for a release.
 
-## Embedded USB backend — developer build only
+## Portable folder distribution — development build
 
-Issue #4 has progressed beyond the earlier manual legacy ZIP importer. The new EXE carries a complete, checksum-verified network payload assembled by CI; **no v1.4/v1.6 ZIP needs to be copied alongside the program**. Windows PowerShell orchestration is tracked in [windows/USB-FullInternet.ps1](windows/USB-FullInternet.ps1). ARM64 device helpers and scripts are under [native/](native/); xjasonlyu/tun2socks v2.7.0 is pinned and its MIT license is preserved under [third_party/](third_party/).
+Following the first real GUI screenshot and user feedback, the delivery format is **a ZIP of a folder**, not a lone EXE. Download the `gui-development-build` artifact, extract it, then launch `RG35XXUsbInternetConnector.exe` beside its readable `backend/` directory. The current CI also produces `windows-portable-zip` for testing the complete future release format.
 
-The GUI has one central Connect/Disconnect action, requires native HTTPS to display Connected, and has no update progress in the main window. All update/setup work happens before main GUI, with a progress bar only on first run.
+The EXE automatically installs **Google's official Android SDK Platform-Tools into `platform-tools/` beside itself**, not into a hidden global folder. The first-run setup asks for language (Korean, English, Japanese) **before** showing a localized Google SDK license dialog. Language and setup markers are saved in `data/`, while SSH private keys and sensitive logs remain private in the Windows user's `%LOCALAPPDATA%`. The main GUI continues to have one Connect/Disconnect button and no update progress bar.
 
-**Hardware validation is still pending.** Use the [development build/testing guide](docs/BACKEND_TESTING.md). Do not publish a user-facing beta Release until the real RG35XX+ (2024) test and update-restart tests pass.
+The ADB probe now recognizes tab/space-separated `adb devices -l` output and checks app port 5056 as well as the standard port 5037 when necessary, without intentionally terminating a shared ADB daemon. It displays serial-redacted English diagnostics in the activity log. These changes address the user's report that a physically connected device appeared disconnected; **actual physical re-testing is still required**.
+
+Future GitHub Release application updates must provide `RG35XX-USB-Internet-Connector.zip`, which includes the EXE plus backend; the updater stages/verifies and swaps both while preserving `platform-tools/` and `data/`.
+
+See [portable Korean install guide](docs/PORTABLE_INSTALL_KR.md) and [real device QA](docs/BACKEND_TESTING.md). The developer build has passed several CI stages but is **not a verified hardware-ready Beta Release**.

@@ -12,10 +12,11 @@ internal static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "RG35XXUsbInternetConnector");
 
-    internal static string ToolsDirectory => Path.Combine(BaseDirectory, "platform-tools");
+    internal static string PortableRoot => AppContext.BaseDirectory;
+    internal static string ToolsDirectory => Path.Combine(PortableRoot, "platform-tools");
     internal static string AdbPath => Path.Combine(ToolsDirectory, "adb.exe");
-    internal static string InitializedMarker => Path.Combine(BaseDirectory, "initialization-complete.marker");
-    internal static string SdkLicenseAcceptedMarker => Path.Combine(BaseDirectory, "google-sdk-license-accepted.marker");
+    internal static string InitializedMarker => Path.Combine(PortableRoot, "data", "initialization-complete.marker");
+    internal static string SdkLicenseAcceptedMarker => Path.Combine(PortableRoot, "data", "google-sdk-license-accepted.marker");
 }
 
 internal record StartupStep(string Message, long BytesReceived = 0, long? BytesTotal = null);
@@ -84,7 +85,7 @@ internal sealed class StartupService
         if (!File.Exists(AppPaths.AdbPath))
             throw new FileNotFoundException("Platform-Tools installation finished without adb.exe.");
 
-        progress.Report(new StartupStep("Verifying embedded USB network backend..."));
+        progress.Report(new StartupStep("Verifying portable USB network backend..."));
         try
         {
             await UsbBackendBundle.EnsureInstalledAsync(log, cancellation);
@@ -94,7 +95,7 @@ internal sealed class StartupService
         {
             // The backend is optional for GUI development builds. Never silently
             // trust a malformed archive; leave the Connect button unavailable.
-            log("Embedded engine unavailable or invalid: " + ex.Message);
+            log("Portable backend unavailable or invalid: " + ex.Message);
         }
 
         progress.Report(new StartupStep("Startup checks completed."));

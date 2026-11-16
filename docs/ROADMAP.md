@@ -109,3 +109,16 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] Real Windows 10/11 + RG35XX+ (2024) first-run and USB connection/disconnection verification.
 - [ ] GitHub self-update and Platform-Tools update/restart regression testing.
 - [ ] Publish `v0.1.0-beta.1` or later only after those checks pass.
+
+## UX and packaging changes from first user GUI test — PR #9
+
+- [x] Source: change delivery to folder ZIP with EXE + verified sibling `backend/`.
+- [x] Source: install official Google `platform-tools/` alongside the EXE using same-volume staging.
+- [x] Source: first launch selects language before localized SDK license consent; persist KO/EN/JA in portable `data/settings.json`.
+- [x] Source: widen title row; prevent the `Language` label from clipping.
+- [x] Source: ADB parser supports spaces/tabs; fallback from dedicated 5056 to shared 5037, suppress serials in English activity logs.
+- [x] Source: app updater now expects a portable Release ZIP, verifies/stages EXE+backend together, preserves Platform-Tools/settings and provides rollback on failure.
+- [ ] Windows CI validate new folder artifact, complete portable ZIP, local archive integrity, updater staging; tests must be **green** before merge.
+- [ ] Re-test user's physically attached RG35XX+ 2024 to verify that ADB now reports `Ready` and connection button enables.
+- [ ] Actually test updating from one portable GitHub beta release to the next including rollback, without deleting `platform-tools`.
+- [ ] Verify USB native HTTPS, KNULLI IP display, PortMaster and STOP on physical device before beta Release.

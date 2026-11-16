@@ -61,7 +61,7 @@ jobs:
           retention-days: 7
 
   build:
-    name: Windows GUI + embedded network backend
+    name: Windows GUI + portable network backend
     runs-on: windows-latest
     needs: backend
     steps:
@@ -88,19 +88,49 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: embedded-backend-development-payload
-          path: src/Connector/assets/
+          path: artifacts/backend-download/
       - name: Restore
         run: dotnet restore src/Connector/Connector.csproj
       - name: Build
         run: dotnet build src/Connector/Connector.csproj --no-restore --configuration Release
       - name: Publish self-contained Windows EXE
         run: dotnet publish src/Connector/Connector.csproj --no-restore --configuration Release --runtime win-x64 -p:PublishSingleFile=true -p:SelfContained=true --output artifacts/windows
-      - name: Smoke test EXE including embedded backend (offline)
+      - name: Assemble portable program folder
+        shell: pwsh
+        run: |
+          Expand-Archive -Path artifacts/backend-download/backend.zip -DestinationPath artifacts/windows/backend
+          Copy-Item docs/PORTABLE_INSTALL_KR.md artifacts/windows/README_KR.md
+          if (!(Test-Path artifacts/windows/backend/SHA256SUMS)) { throw 'Missing backend integrity manifest.' }
+      - name: Smoke test EXE and portable backend folder (offline)
         shell: pwsh
         run: |
           $exe = (Resolve-Path ".\artifacts\windows\RG35XXUsbInternetConnector.exe").Path
           $proc = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Self-test failed with exit code $($proc.ExitCode)" }
+      - name: Package portable ZIP distribution
+        shell: pwsh
+        run: |
+          New-Item -Force -ItemType Directory dist | Out-Null
+          Compress-Archive -Path artifacts/windows/* -DestinationPath dist/RG35XX-USB-Internet-Connector-dev.zip -CompressionLevel Optimal
+      - name: Validate distribution ZIP with the actual Windows EXE
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe").Path
+          $zip = (Resolve-Path ".\\dist\\RG35XX-USB-Internet-Connector-dev.zip").Path
+          $proc = Start-Process -FilePath $exe -ArgumentList @('--verify-package', ('"' + $zip + '"')) -Wait -PassThru
+          if ($proc.ExitCode -ne 0) {
+            if (Test-Path artifacts/windows/package-verification-error.txt) {
+              Get-Content artifacts/windows/package-verification-error.txt
+            }
+            Get-ChildItem artifacts/windows -Force | Select-Object Name,Length | Format-Table
+            throw "Portable ZIP failed updater validation with exit code $($proc.ExitCode)"
+          }
+      - name: Upload portable ZIP (NOT a GitHub Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable-zip
+          path: dist/RG35XX-USB-Internet-Connector-dev.zip
+          retention-days: 7
       - name: Save test build (NOT a GitHub Release)
         uses: actions/upload-artifact@v4
         with:

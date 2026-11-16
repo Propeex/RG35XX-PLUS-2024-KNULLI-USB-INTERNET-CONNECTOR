@@ -32,13 +32,14 @@ internal sealed class MainForm : Form
     private bool _mayHaveActiveSession;
     private int _polling;
     private bool _closed;
+    private string _lastAdbDiagnostic = "";
     private DateTimeOffset _lastHealthCheck = DateTimeOffset.MinValue;
 
     internal MainForm(IReadOnlyList<string> startupLogs)
     {
         Text = "RG35XX+ (2024) KNULLI USB Internet Connector";
-        ClientSize = new Size(760, 470);
-        MinimumSize = new Size(670, 420);
+        ClientSize = new Size(900, 470);
+        MinimumSize = new Size(850, 420);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10F);
         BackColor = Color.FromArgb(247, 248, 250);
@@ -50,18 +51,20 @@ internal sealed class MainForm : Form
         _mayHaveActiveSession = File.Exists(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "RG35XX_USB_FullNet", "ssh.pid"));
-        _language.SelectedIndex = 0;
+        _selectedLanguage = LanguageSettings.Load();
+        _language.SelectedIndex = Array.FindIndex(UiStrings.Languages,
+            x => x.Code == _selectedLanguage);
         ApplyLanguage();
 
         foreach (string line in startupLogs) AppendLog(line);
         if (!_engineInstalled)
         {
-            AppendLog("Embedded USB backend missing or invalid; connection is disabled.");
-            AppendLog("This development build has no verified embedded backend. Consult the GitHub build log.");
+            AppendLog("Portable backend is missing or invalid; connection is disabled.");
+            AppendLog("The portable backend folder failed validation. Extract the full ZIP again.");
         }
         else
         {
-            AppendLog("Embedded source-tracked USB backend available (hardware re-test required).");
+            AppendLog("Portable USB backend verified (hardware re-test required).");
         }
 
         _statusTimer.Interval = 9000;
@@ -83,20 +86,20 @@ internal sealed class MainForm : Form
     private void BuildLayout()
     {
         _title.Location = new Point(24, 18);
-        _title.Size = new Size(537, 44);
+        _title.Size = new Size(615, 44);
         _title.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
         _title.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         Controls.Add(_title);
 
-        _languageLabel.Location = new Point(564, 23);
-        _languageLabel.Size = new Size(74, 30);
+        _languageLabel.Location = new Point(662, 23);
+        _languageLabel.Size = new Size(100, 30);
         _languageLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _languageLabel.Text = "Language";
         Controls.Add(_languageLabel);
 
         _language.DropDownStyle = ComboBoxStyle.DropDownList;
-        _language.Location = new Point(637, 18);
-        _language.Size = new Size(101, 32);
+        _language.Location = new Point(767, 18);
+        _language.Size = new Size(112, 32);
         _language.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         foreach (var language in UiStrings.Languages)
             _language.Items.Add(language.Display);
@@ -106,17 +109,22 @@ internal sealed class MainForm : Form
             if (selected < 0) return;
             _selectedLanguage = UiStrings.Languages[selected].Code;
             ApplyLanguage();
+            try { LanguageSettings.Save(_selectedLanguage); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                AppendLog("Cannot save language preference: " + e.GetType().Name);
+            }
             AppendLog("Language switched to " + _selectedLanguage + ".");
         };
         Controls.Add(_language);
 
         _status.Location = new Point(25, 74);
-        _status.Size = new Size(700, 35);
+        _status.Size = new Size(850, 35);
         _status.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
         _status.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         Controls.Add(_status);
 
-        _connectToggle.Location = new Point(218, 140);
+        _connectToggle.Location = new Point(288, 140);
         _connectToggle.Size = new Size(324, 62);
         _connectToggle.BackColor = Color.FromArgb(38, 112, 222);
         _connectToggle.ForeColor = Color.White;
@@ -135,7 +143,7 @@ internal sealed class MainForm : Form
         Controls.Add(_logLabel);
 
         _log.Location = new Point(24, 259);
-        _log.Size = new Size(712, 186);
+        _log.Size = new Size(852, 186);
         _log.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
         _log.Multiline = true;
         _log.ReadOnly = true;
@@ -197,6 +205,9 @@ internal sealed class MainForm : Form
             }
             else
             {
+                _mayHaveActiveSession = File.Exists(Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "RG35XX_USB_FullNet", "ssh.pid"));
                 SetState(ConnectionState.Error);
             }
 
@@ -233,6 +244,12 @@ internal sealed class MainForm : Form
                 || _state == ConnectionState.Connected;
             bool ready = await AdbProbe.HasReadyDeviceAsync(keepAdbServer);
             if (_closed || IsDisposed || _busy) return;
+            string detail = AdbProbe.LastDiagnostic;
+            if (detail != _lastAdbDiagnostic)
+            {
+                _lastAdbDiagnostic = detail;
+                AppendLog(detail);
+            }
             _adbReady = ready;
 
             if (!ready)

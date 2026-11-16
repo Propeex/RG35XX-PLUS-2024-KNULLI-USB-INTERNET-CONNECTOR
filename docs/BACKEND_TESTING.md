@@ -1,11 +1,11 @@
 # RG35XX+ (2024) USB Internet Connector — hardware QA
 
-> **Development build only.** The embedded backend builds and passes offline tests in GitHub Actions. It has **not yet been verified on the actual RG35XX+ (2024)**. The historical v1.4 manual setup was tested, not this new EXE.
+> **Development build only.** The portable backend builds and passes offline tests in GitHub Actions. It has **not yet been verified on the actual RG35XX+ (2024)**. The historical v1.4 manual setup was tested, not this new EXE.
 
 ## What changed
 
 - **No historical v1.4/v1.6 ZIP is required.** GitHub Actions builds three ARM64 Go helpers from tracked source and downloads the official MIT-licensed xjasonlyu/tun2socks v2.7.0 ARM64 release with a pinned SHA-256 check.
-- The complete, checksummed backend (Go helpers, six KNULLI shell scripts, tracked Windows PowerShell orchestrator, and third-party license) is embedded into the single Windows EXE.
+- The complete, checksummed backend (Go helpers, six KNULLI shell scripts, tracked Windows PowerShell orchestrator, and third-party license) is included as a readable `backend/` folder **beside** the Windows EXE.
 - On startup, the EXE extracts a verified version into a private, content-addressed subfolder of `%LOCALAPPDATA%\RG35XXUsbInternetConnector\backend`. It **does not overwrite running helpers**.
 - The first-ever startup may display a separate setup progress bar. Later launches perform update checks before the main screen without a progress bar. **No update progress appears in the main GUI.**
 - Only one central button controls **Connect / Disconnect**. All GUI action logs are English; Korean, English and Japanese are supported for buttons/status labels.
@@ -13,9 +13,9 @@
 
 ## Obtain a development EXE
 
-1. Visit the [GitHub Actions build runs](../actions/workflows/build.yml). Select the newest **successful** run on `feature/embedded-usb-engine` (or `main` after merging).
+1. Visit the [GitHub Actions build runs](../actions/workflows/build.yml). Select the newest **successful** run on PR #9's branch `fix/portable-ux-adb-detection` (or `main` after merging).
 2. Download the short-lived artifact named `gui-development-build`. Extract it to a **new Windows folder**.
-3. Run `RG35XXUsbInternetConnector.exe`. Do **not** copy a historical ZIP into that folder, and do not place the EXE in the Android Platform-Tools folder.
+3. Run `RG35XXUsbInternetConnector.exe` from **the same folder as `backend/`**. No old ZIP is needed. The CI artifact `gui-development-build` is already a downloadable ZIP of these files; the separate `windows-portable-zip` artifact wraps a second inner release-format ZIP for updater testing.
 4. Do **not** expect a published GitHub Release until hardware validation is complete.
 
 ## First physical-device test

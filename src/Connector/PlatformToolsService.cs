@@ -62,11 +62,11 @@ internal static class PlatformToolsService
             throw new InvalidOperationException("SDK download URL must be HTTPS on dl.google.com.");
 
         Directory.CreateDirectory(AppPaths.BaseDirectory);
-        string session = Path.Combine(AppPaths.BaseDirectory, "stage-" + Guid.NewGuid().ToString("N"));
+        string session = Path.Combine(AppPaths.PortableRoot, ".tools-stage-" + Guid.NewGuid().ToString("N"));
         string zip = Path.Combine(session, "platform-tools.zip");
         string extract = Path.Combine(session, "extract");
         string staged = Path.Combine(extract, "platform-tools");
-        string backup = Path.Combine(AppPaths.BaseDirectory,
+        string backup = Path.Combine(AppPaths.PortableRoot,
             "platform-tools-backup-" + Guid.NewGuid().ToString("N"));
 
         Directory.CreateDirectory(session);
@@ -118,6 +118,21 @@ internal static class PlatformToolsService
             Directory.Move(staged, AppPaths.ToolsDirectory);
             movedNew = true;
             log("Installed Platform-Tools revision " + unpackedRevision + ".");
+        }
+        catch (IOException ex) when (installed)
+        {
+            // Existing tools may be locked by an owned/shared ADB daemon.
+            // Never prevent GUI startup merely because an optional update is
+            // unavailable. Restore the old files if staging had begun.
+            if (movedOld && !movedNew && Directory.Exists(backup))
+            {
+                if (Directory.Exists(AppPaths.ToolsDirectory))
+                    Directory.Delete(AppPaths.ToolsDirectory, recursive: true);
+                Directory.Move(backup, AppPaths.ToolsDirectory);
+            }
+            if (!File.Exists(AppPaths.AdbPath)) throw;
+            log("Platform-Tools update deferred; existing installation retained (" +
+                ex.GetType().Name + ").");
         }
         catch
         {
