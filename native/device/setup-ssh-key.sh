@@ -10,12 +10,15 @@ esac
 case "$PUB" in
   *"'"*|*'`'*|*'$'*|*'\'*|*'\r'*|*'\n'*) echo 'ERROR: unsafe public key characters' >&2; exit 2;;
 esac
-ROOT_HOME=/userdata/system
-if [ ! -d "$ROOT_HOME" ]; then
-  ROOT_HOME="$(awk -F: '$1 == "root" {print $6; exit}' /etc/passwd 2>/dev/null)"
-  [ -n "$ROOT_HOME" ] || ROOT_HOME=/root
-fi
-[ -d "$ROOT_HOME" ] || { echo "ERROR: root home not found: $ROOT_HOME" >&2; exit 3; }
+# SSH (including Dropbear) resolves ~/.ssh relative to the root account's
+# passwd home. KNULLI normally uses /userdata/system, but do not register
+# a key in the wrong directory when a firmware image differs.
+ROOT_HOME="$(awk -F: '$1 == "root" {print $6; exit}' /etc/passwd 2>/dev/null)"
+case "$ROOT_HOME" in
+  /*) ;;
+  *) ROOT_HOME=/userdata/system ;;
+esac
+[ -d "$ROOT_HOME" ] || { echo "ERROR: SSH root account home unavailable: $ROOT_HOME" >&2; exit 3; }
 DIR="$ROOT_HOME/.ssh"
 AUTH="$DIR/authorized_keys"
 [ ! -L "$DIR" ] || { echo 'ERROR: .ssh is symlink, refusing to modify' >&2; exit 4; }
@@ -32,3 +35,11 @@ else
   printf '%s\n' "$PUB" >> "$AUTH"
   echo 'SSH public key: installed without removing existing keys.'
 fi
+
+# Do not rely only on adb.exe's return code: some adbd variants hide the
+# remote shell exit code. Windows requires this postcondition marker.
+if ! grep -Fqx "$PUB" "$AUTH"; then
+  echo 'ERROR: SSH authorized_keys does not contain the requested key.' >&2
+  exit 6
+fi
+echo 'RGUSB_SSH_KEY_READY'
