@@ -9,7 +9,7 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] Audit legacy helper licenses and migrate reproducible backend source
 - [ ] Add a Windows desktop source project and CI build
 
-## Phase 1 — Working Windows GUI skeleton
+## Phase 1 — Working Windows GUI skeleton (development branch; CI pending)
 - [ ] Launch from EXE; no persistent console
 - [ ] App title upper-left, language selector upper-right
 - [ ] Languages: Korean, English, Japanese; instant switching for **buttons/status only**
@@ -22,7 +22,7 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] Detect app updates via GitHub Releases (including beta channel)
 - [ ] Download, verify, stage, replace, restart and rollback safely
 - [ ] Verify/update official Google Platform-Tools on first and subsequent launches
-- [ ] Show accurate, separate app and Platform-Tools update progress bars
+- [ ] Show accurate progress **only in first-run setup**; subsequent updates complete before main UI with no progress bars
 - [ ] Work offline with already installed versions
 - [ ] Do not respawn `adb.exe` after explicit Disconnect
 
@@ -56,3 +56,16 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - During testing, mark releases as **prerelease/beta**. Do not confuse historical ZIP versions (v1.4-v1.6) with new EXE release numbering.
 - Every change must be committed; prefer feature branches + reviewed PRs. Open issues for incomplete work and regressions.
 - A working source commit is not a published release. Do not claim binaries exist until GitHub Actions actually produces them.
+
+## Current implementation status (2026-11-16, PR #6)
+
+- [x] Source refactor: remove all update/progress UI from `MainForm`.
+- [x] Source: first-run-only `BootstrapForm` progress before opening `MainForm`.
+- [x] Source: Google Platform-Tools metadata/version check, staged download and replacement.
+- [x] Source: GitHub Release discovery, digest verification and separate EXE updater-copy handoff.
+- [x] Source: ADB device readiness polling with isolated temporary server port.
+- [ ] **Windows CI compile must pass; manual Windows startup tests required.**
+- [ ] Verify real SDK repository XML, official ZIP checksums/structure on fresh Windows machine.
+- [ ] Verify GitHub prerelease-to-prerelease update, restart and failure rollback.
+- [ ] Integrate and test known-working v1.4 USB networking engine.
+- [ ] Release only after tested milestone with appropriate beta designation.
