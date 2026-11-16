@@ -68,3 +68,11 @@ Give the assistant this GitHub repo URL, ask it to **read README.md, docs/PROJEC
 - **Main UI must never display update progress bars.** Program and Platform-Tools update checks/installation finish before entering main UI.
 - Display download progress **only on first-ever startup** in a dedicated startup window. Subsequent startups may briefly display a status message without progress bars.
 - User explicitly asked to keep developing and log all changes in GitHub. The GUI foundation PR is #6. No hardware-ready EXE released yet.
+
+## 2026-11-16 latest repository state (after PR #6)
+
+- PR #6 merged into `main` as commit `dfa97ae63e597d965d8f8d683be5050edfaa8be8`.
+- Windows CI run `43791370453` passed Build, Publish self-contained single-file EXE, and offline smoke tests. This is **not** a full functional release.
+- Main EXE UI has no update progress bar. First-run-only startup BootstrapForm displays progress; later launches silently check/apply updates before MainForm.
+- Google SDK Platform-Tools bootstrap/update and GitHub application updater have code in `main`; both need manual first-run/update tests.
+- The internet Connect button remains intentionally **disabled** until issue #4 brings over the verified KNULLI backend. No GitHub Release exists yet.
