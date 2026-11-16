@@ -57,7 +57,11 @@ internal sealed class MainForm : Form
 
     internal MainForm()
     {
-        Text = "RG35XX+ (2024) KNULLI USB Internet Connector";
+        Text = "KNULLI USB Link — RG35XX+ (2024)";
+        // Use the branded PE icon for this window and the Windows taskbar.
+        try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+        catch (Exception ex) when (ex is IOException or ArgumentException
+                or System.ComponentModel.Win32Exception) { }
         ClientSize = new Size(900, 530);
         MinimumSize = new Size(850, 480);
         StartPosition = FormStartPosition.CenterScreen;
