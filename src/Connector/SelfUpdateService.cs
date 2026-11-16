@@ -116,6 +116,7 @@ internal static class SelfUpdateService
             // ZIP verifier alone cannot detect a non-starting new build.
             progress.Report(new StartupStep("Testing downloaded application before install..."));
             await PreflightStagedExecutableAsync(stage, ct);
+            await PreflightStagedLauncherAsync(stage, ct);
             string newExeHash = PortableUpdatePackage.ExeHash(stage);
             string? currentExe = Environment.ProcessPath;
             if (string.IsNullOrWhiteSpace(currentExe) || !File.Exists(currentExe))
@@ -147,6 +148,34 @@ internal static class SelfUpdateService
                 try { Directory.Delete(stage, recursive: true); } catch (IOException) { }
             }
         }
+    }
+
+    private static async Task PreflightStagedLauncherAsync(string stage, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        var info = new ProcessStartInfo(Path.Combine(stage, PortableUpdatePackage.Launcher))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = stage
+        };
+        info.ArgumentList.Add("--self-test");
+        using var process = Process.Start(info)
+            ?? throw new InvalidDataException("Staged launcher could not start.");
+        try { await process.WaitForExitAsync(timeout.Token); }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync(CancellationToken.None);
+            }
+            catch (InvalidOperationException) { }
+            throw new InvalidDataException("Staged launcher test timed out.");
+        }
+        if (process.ExitCode != 0)
+            throw new InvalidDataException("Staged launcher self-test failed.");
     }
 
     private static async Task PreflightStagedExecutableAsync(string stage, CancellationToken ct)
