@@ -112,6 +112,13 @@ jobs:
         run: |
           New-Item -Force -ItemType Directory dist | Out-Null
           Compress-Archive -Path artifacts/windows/* -DestinationPath dist/RG35XX-USB-Internet-Connector-dev.zip -CompressionLevel Optimal
+      - name: Validate distribution ZIP with the actual Windows EXE
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe").Path
+          $zip = (Resolve-Path ".\\dist\\RG35XX-USB-Internet-Connector-dev.zip").Path
+          $proc = Start-Process -FilePath $exe -ArgumentList @('--verify-package', ('"' + $zip + '"')) -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Portable ZIP failed updater validation with exit code $($proc.ExitCode)" }
       - name: Upload portable ZIP (NOT a GitHub Release)
         uses: actions/upload-artifact@v4
         with:
