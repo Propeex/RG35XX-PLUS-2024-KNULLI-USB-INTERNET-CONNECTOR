@@ -160,8 +160,19 @@ internal static class SelfUpdateService
             WorkingDirectory = stage
         };
         info.ArgumentList.Add("--self-test");
-        using var process = Process.Start(info)
-            ?? throw new InvalidOperationException("Downloaded executable failed to launch.");
+        Process process;
+        try
+        {
+            process = Process.Start(info)
+                ?? throw new InvalidDataException("Downloaded executable failed to launch.");
+        }
+        catch (System.ComponentModel.Win32Exception e)
+        {
+            // Treat an unlaunchable candidate as an invalid update, not as a
+            // fatal GUI startup error; leave the working installation intact.
+            throw new InvalidDataException("Downloaded executable cannot start on this Windows installation.", e);
+        }
+        using (process)
         try
         {
             await process.WaitForExitAsync(timeout.Token);
