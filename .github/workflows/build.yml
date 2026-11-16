@@ -61,7 +61,7 @@ jobs:
           retention-days: 7
 
   build:
-    name: Windows GUI + embedded network backend
+    name: Windows GUI + portable network backend
     runs-on: windows-latest
     needs: backend
     steps:
