@@ -49,7 +49,7 @@ Legacy helpers: ARM64 `tunctl`, `dns-bridge`, `daemon-launch`, and externally do
 1. EXE opens a lightweight Windows GUI.
 2. Startup app update from GitHub Releases, automatic apply and restart.
 3. First launch auto-download latest official Windows Platform-Tools; subsequently compare version and update.
-4. Visible progress bars for both update processes (including validation stages).
+4. **Updated requirement (2026-11-16):** Progress bars only in a **first-run setup window**. Later launches do checks/updates before main screen without a progress bar; main screen never shows update progress.
 5. Program name top-left; language chooser top-right; instant switch.
 6. Translate only buttons and status messages; keep execution logs in English.
 7. Limit first set of languages to Korean, English, Japanese.
@@ -62,3 +62,9 @@ Legacy helpers: ARM64 `tunctl`, `dns-bridge`, `daemon-launch`, and externally do
 ## How to resume in another chat
 
 Give the assistant this GitHub repo URL, ask it to **read README.md, docs/PROJECT_CONTEXT.md, docs/ARCHITECTURE.md, docs/ROADMAP.md and docs/DEVELOPMENT_LOG.md**, inspect open PRs/issues/releases and latest commit, then implement the next highest-priority uncompleted issue on a branch/PR. Do not rely on memory of a previous conversation.
+
+## Most recent approved UX change (2026-11-16)
+
+- **Main UI must never display update progress bars.** Program and Platform-Tools update checks/installation finish before entering main UI.
+- Display download progress **only on first-ever startup** in a dedicated startup window. Subsequent startups may briefly display a status message without progress bars.
+- User explicitly asked to keep developing and log all changes in GitHub. The GUI foundation PR is #6. No hardware-ready EXE released yet.
