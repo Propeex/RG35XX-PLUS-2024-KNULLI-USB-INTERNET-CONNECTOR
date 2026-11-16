@@ -45,3 +45,8 @@
 - Updated `docs/BACKEND_TESTING.md` for a reproducible hardware test. **No functional EXE Beta Release** until this path works on real Windows/handheld hardware and fully audited native packaging is ready.
 
 - Startup now defers both automatic EXE update and Google Platform-Tools replacement when the app-owned SSH PID marker exists, avoiding in-use adb.exe replacement and reconnect loops. This is intentional even if the PID marker might be stale; user must use STOP before updating.
+
+## 2026-11-16 — PR #7 merged to main (experimental backend milestone)
+- PR #7 merged as `669f7da87fff8d3e04732f20b3507627435e0d3d` after Windows build/smoke tests and native Go/shell CI passed.
+- The EXE source now has a functional **developer/test-only** hidden PowerShell Connect/Disconnect path when the exact local legacy ZIP is supplied. This has NOT been tested on the handheld and is not self-contained yet.
+- Issue #4 stays open for audited packaging, source migration of Windows orchestration and real-device tests. No Beta Release/tag was created.
