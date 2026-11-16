@@ -14,6 +14,8 @@ internal static class SelfTests
     {
         try
         {
+            Assert(UsbBackendBundle.VerifyEmbedded(out string backendError),
+                "embedded backend integrity: " + backendError);
             Assert(SemVersion.TryParse("v0.1.0-beta.1", out var beta1), "parse beta1");
             Assert(SemVersion.TryParse("0.1.0-beta.2", out var beta2), "parse beta2");
             Assert(SemVersion.TryParse("v0.1.0", out var stable), "parse stable");
