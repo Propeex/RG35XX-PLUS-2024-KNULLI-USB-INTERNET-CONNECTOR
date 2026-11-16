@@ -88,7 +88,7 @@ internal sealed class BootstrapForm : Form
         _progress.Size = new Size(532, 18);
         Controls.Add(_progress);
 
-        _details.Visible = _firstLaunch && !_chooseLanguage;
+        _details.Visible = false; // Diagnostics remain private, never untranslated in localized setup.
         _details.Multiline = true;
         _details.ReadOnly = true;
         _details.ScrollBars = ScrollBars.Vertical;
@@ -123,7 +123,7 @@ internal sealed class BootstrapForm : Form
         _heading.Visible = true;
         _stage.Visible = true;
         _progress.Visible = _firstLaunch;
-        _details.Visible = _firstLaunch;
+        _details.Visible = false; // First-run screen shows only localized status + progress.
         // Lift the compact language-dialog bounds before expanding to the
         // localized setup screen; otherwise MaximumSize clips the controls.
         MinimumSize = Size.Empty;
@@ -291,10 +291,8 @@ internal sealed class BootstrapForm : Form
     private void Log(string message)
     {
         _events.Add(message); // English diagnostics, regardless of selected language
-        if (_firstLaunch && !IsDisposed)
-        {
-            if (_details.TextLength > 0) _details.AppendText(Environment.NewLine);
-            _details.AppendText(message);
-        }
+        // Bootstrap's English technical diagnostics are not displayed in the
+        // localized setup screen. The selected language controls all visible
+        // stage and consent text; the main Activity Log starts fresh.
     }
 }
