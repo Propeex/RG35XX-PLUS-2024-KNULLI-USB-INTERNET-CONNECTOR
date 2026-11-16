@@ -21,8 +21,14 @@ internal static class Program
                 Directory.Delete(stage, recursive: true);
                 Environment.ExitCode = 0;
             }
-            catch
+            catch (Exception ex)
             {
+                try
+                {
+                    File.WriteAllText(Path.Combine(AppPaths.PortableRoot,
+                        "package-verification-error.txt"), ex.ToString());
+                }
+                catch (IOException) { }
                 Environment.ExitCode = 2;
             }
             return;
