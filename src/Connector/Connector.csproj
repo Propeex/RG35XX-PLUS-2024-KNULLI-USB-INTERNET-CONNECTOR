@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>RG35XXUsbInternetConnector</AssemblyName>
+    <Product>KNULLI USB Link</Product>
+    <ApplicationIcon>..\..\assets\knulli-usb-link.ico</ApplicationIcon>
     <RootNamespace>RG35XXUsbInternetConnector</RootNamespace>
     <Version>0.1.0</Version>
     <FileVersion>0.1.0.0</FileVersion>
