@@ -22,6 +22,20 @@ internal static class SelfTests
                 "accept tab-separated ADB device line");
             Assert(!AdbProbe.HasReadyDevice("0123456789 unauthorized"),
                 "do not treat unauthorized device as ready");
+            Assert(!AdbProbe.HasReadyDevice("serial-one device\nserial-two device\n"),
+                "multiple authorized devices are ambiguous");
+            Assert(!AdbProbe.HasReadyDevice("serial-one offline"),
+                "offline USB transport is not ready");
+            Assert(UsbEngineRunner.NativeProbeSucceeded(0, "RGUSB_NATIVE_OK\r\n"),
+                "explicit remote HTTPS success required");
+            Assert(!UsbEngineRunner.NativeProbeSucceeded(0, "RGUSB_NATIVE_FAIL\r\n"),
+                "adb success exit code cannot prove remote HTTPS");
+            Assert(!UsbEngineRunner.NativeProbeSucceeded(1, "RGUSB_NATIVE_OK"),
+                "adb errors cannot prove remote HTTPS");
+            Assert(UiStrings.Get("ko-KR", "DeviceDisconnected") == "연결 안 됨",
+                "Korean device disconnected state");
+            Assert(UiStrings.Get("ko-KR", "InternetConnected") == "연결됨",
+                "Korean Internet connected state");
             Assert(SemVersion.TryParse("v0.1.0-beta.1", out var beta1), "parse beta1");
             Assert(SemVersion.TryParse("0.1.0-beta.2", out var beta2), "parse beta2");
             Assert(SemVersion.TryParse("v0.1.0", out var stable), "parse stable");
@@ -39,6 +53,15 @@ internal static class SelfTests
             Assert(typeof(BootstrapForm).GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
                 .Any(field => field.FieldType == typeof(ProgressBar)),
                 "Only startup is allowed a progress bar");
+            Assert(typeof(MainForm).GetField("_deviceValue",
+                    BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                "MainForm has independent device indicator");
+            Assert(typeof(MainForm).GetField("_internetValue",
+                    BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                "MainForm has independent Internet indicator");
+            Assert(typeof(MainForm).GetField("_languageLabel",
+                    BindingFlags.Instance | BindingFlags.NonPublic) is null,
+                "Main language selector has no redundant Language label");
             return 0;
         }
         catch
