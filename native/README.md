@@ -9,3 +9,7 @@ These files were migrated from the user's prior **v1.4** KNULLI USB connectivity
 They use only Go's standard library. The native CI workflow tests the DNS code and builds reproducible **Linux ARM64** executables. A compiled binary is **not** automatically released or installed on users' machines yet; license/ownership must be reviewed before distribution. 
 
 `tun2socks` is a separate third-party project by Jason Lyu (`xjasonlyu/tun2socks`), licensed MIT as of v2.7.0. The historical backend downloads that precise release from GitHub with its pinned SHA-256. We do not bundle tun2socks in this source repository. Its license and attribution must be included in any future official binary distribution.
+
+## Device shell scripts
+
+Original KNULLI `start-fullnet.sh`, `stop-fullnet.sh`, `compat-fullnet.sh`, `check-fullnet.sh`, `watch-fullnet.sh` and `setup-ssh-key.sh` have been migrated into `native/device/`. The Linux CI workflow validates their POSIX shell syntax. This is source audit/migration, **not** evidence of automatic deployment or physical-device reliability.
