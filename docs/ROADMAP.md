@@ -133,3 +133,31 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] **Manual Windows UI retest**: actual language selector, localized Google SDK consent and unclipped Language label.
 - [ ] **Release update test**: portable EXE/backend upgrade across two prereleases while keeping adjacent Platform-Tools and user settings.
 - [ ] **No beta Release yet**: wait for successful physical connection and reliable STOP.
+
+
+## Next hardware retest — separate device/Internet indicators and START/STOP markers
+
+- [x] Source: initial language chooser contains only `Language` and choices; selected locale applies before SDK consent.
+- [x] Source: separate device and Internet binary indicators; device unplug hides Internet.
+- [x] Source: no recycled startup messages in the main activity view, localized heading, current-language selector.
+- [x] Source: ADB USB arrival/removal hints + frequent probe and multi-device rejection.
+- [x] Source: explicit remote shell state markers, independent STOP checks and native HTTPS proof; live stage output during long actions.
+- [x] Initial PR CI compile, PowerShell AST parse, ARM64 backend tests, EXE smoke and portable ZIP integrity passed; re-run required after the newest stability changes.
+- [ ] Hardware: validate improved device plug/unplug reporting and both UI colors.
+- [ ] Hardware: check actual `active`/TUN result, START, healthy HTTPS, successful STOP, reconnect and PortMaster.
+- [ ] Regression: first-run three locales, persistent language, restart resets GUI activity log but retains private technical diagnostics.
+- [ ] No Beta Release until these hardware and real portable update tests pass.
+
+## Stability before convenience features — accepted scope
+
+- [x] Prevent two GUI instances from competing for the owned ADB/SSH state.
+- [x] Reuse the dedicated ADB daemon while a ready device is polled instead of restarting it every 2.5 seconds; request shutdown on GUI exit if no owned SSH tunnel.
+- [x] Bound the SSH reverse SOCKS readiness phase to a 60-second deadline with short probes; report stage messages while it is active.
+- [x] Cancel an in-flight USB action on sustained device loss (two consecutive failed ADB probes) or Windows suspend; **do not auto-reconnect**.
+- [x] Record each manual Internet action's elapsed time in the English activity log.
+- [x] Log troubleshooting checkpoints for ADB forwarding, SSH/SOCKS, payload upload, TUN/DNS, native HTTPS and compatibility; no user-facing log export.
+- [ ] Hardware performance measurements before enabling any automatic connect behavior; automatic connect is explicitly deferred.
+- [ ] Hardware verify cancellation and explicit restart after USB unplug or Windows sleep; do not attempt elaborate auto recovery.
+- [ ] Future: optional minimize-to-tray behavior **after** stable manual START/STOP.
+- [ ] Future: simple settings **after** tray behavior (not before).
+- [ ] Preserve the current atomic staged + checksum-verified updater; update failure notifications and invasive updater rewrites are outside the current scope. Test two real release upgrades before promoting to beta.

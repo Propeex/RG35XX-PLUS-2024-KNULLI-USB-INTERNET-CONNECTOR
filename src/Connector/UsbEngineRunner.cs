@@ -1,12 +1,12 @@
 using System;
 using System.Diagnostics;
-using System.Text;
 
 namespace RG35XXUsbInternetConnector;
 
 internal enum EngineAction { Start, Stop, Status }
 
-internal sealed record EngineResult(bool Success, string DiagnosticLog, int ExitCode);
+internal sealed record EngineResult(bool Success, string DiagnosticLog, int ExitCode,
+    bool NativeVerified);
 
 /// <summary>
 /// Runs the source-tracked USB PowerShell backend with NO visible console and with
@@ -49,8 +49,12 @@ internal sealed class UsbEngineRunner
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
                 WorkingDirectory = UsbBackendBundle.Folder,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
+                // The long-running ssh.exe tunnel can inherit PowerShell's
+                // redirected output handles. ReadToEndAsync would then wait
+                // forever after PowerShell has exited, leaving START stuck 6/6.
+                // All activity is already streamed from the private log file.
+                RedirectStandardOutput = false,
+                RedirectStandardError = false
             };
             foreach (string arg in new[]
             {
@@ -74,23 +78,17 @@ internal sealed class UsbEngineRunner
 
             try
             {
-                Task<string> outputTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
-                Task<string> errorTask = process.StandardError.ReadToEndAsync(timeout.Token);
-                await process.WaitForExitAsync(timeout.Token);
-                string stdout = await outputTask;
-                string stderr = await errorTask;
-                // The source-tracked orchestrator writes English lines into
-                // this private file; reflect them in the GUI after completion.
-                // Avoid forwarding raw adb stdout or private SSH material.
-                if (File.Exists(logfile))
+                // Stream bounded English log lines as they are written. Waiting
+                // until process exit made a slow SSH/TUN start look frozen.
+                Task completed = process.WaitForExitAsync(timeout.Token);
+                int nextLine = 0;
+                while (!completed.IsCompleted)
                 {
-                    foreach (string line in File.ReadLines(logfile).TakeLast(160))
-                    {
-                        if (line.Length > 0 && line.Length < 1200
-                            && !line.Contains("PRIVATE KEY", StringComparison.OrdinalIgnoreCase))
-                            log(line);
-                    }
+                    nextLine = StreamNewLogLines(logfile, nextLine, log);
+                    await Task.WhenAny(completed, Task.Delay(400, timeout.Token));
                 }
+                await completed;
+                nextLine = StreamNewLogLines(logfile, nextLine, log);
                 if (process.ExitCode == 0)
                 {
                     log("USB backend operation succeeded: " + token);
@@ -100,10 +98,12 @@ internal sealed class UsbEngineRunner
                     log("USB backend operation failed: " + token +
                         " (exit code " + process.ExitCode + ").");
                     log("Detailed technical log saved to " + logfile);
-                    if (!string.IsNullOrWhiteSpace(stderr))
-                        log("PowerShell exited with diagnostic stderr (see technical log).");
                 }
-                return new EngineResult(process.ExitCode == 0, logfile, process.ExitCode);
+                bool nativeVerified = action == EngineAction.Start &&
+                    File.Exists(logfile) &&
+                    NativeBackendVerified(File.ReadAllText(logfile));
+                return new EngineResult(process.ExitCode == 0, logfile, process.ExitCode,
+                    nativeVerified);
             }
             catch (OperationCanceledException)
             {
@@ -118,16 +118,45 @@ internal sealed class UsbEngineRunner
         }
     }
 
+    private static int StreamNewLogLines(string file, int nextLine, Action<string> log)
+    {
+        try
+        {
+            if (!File.Exists(file)) return nextLine;
+            // The log is small and only one writer exists for this action.
+            // Reopening it allows us to tolerate temporary Windows file locks.
+            foreach (string line in File.ReadLines(file).Skip(nextLine).Take(200))
+            {
+                nextLine++;
+                if (!string.IsNullOrWhiteSpace(line) && line.Length < 1200
+                    && !line.Contains("PRIVATE KEY", StringComparison.OrdinalIgnoreCase))
+                    log(line);
+            }
+        }
+        catch (IOException) { /* Retry on the next tick if PowerShell owns the file. */ }
+        return nextLine;
+    }
+
+    // This marker is written only *after* the PowerShell backend has tested
+    // device-side native HTTPS, before optional KNULLI compatibility patches.
+    internal static bool NativeBackendVerified(string actionLog)
+        => actionLog.Contains("RGUSB_NATIVE_HTTPS_OK:", StringComparison.Ordinal);
+
     /// <summary>
-    /// Native internet test, not a stale active flag. Uses adb port 5056 and
-    /// the existing TUN. Keep the ADB daemon alive while SSH depends on it.
+    /// Native Internet must be proven by an explicit shell output marker:
+    /// older adbd versions can report exit 0 for a failing remote shell test.
+    /// Never trust a stale active flag or adb process exit code alone.
     /// </summary>
+    internal static bool NativeProbeSucceeded(int exitCode, string output)
+        => exitCode == 0 && output.Trim() == "RGUSB_NATIVE_OK";
+
     internal static async Task<bool> NativeInternetHealthyAsync(CancellationToken cancellation)
     {
         if (!File.Exists(AppPaths.AdbPath)) return false;
-        const string command = "test -e /userdata/system/rgusb-fullnet/active && " +
+        const string command = "if test -e /userdata/system/rgusb-fullnet/active && " +
             "ip link show rgusb0 >/dev/null 2>&1 && " +
-            "curl --noproxy '*' -fsSI --max-time 7 https://example.com >/dev/null 2>&1";
+            "curl --noproxy '*' -fsSI --max-time 7 https://example.com >/dev/null 2>&1; " +
+            "then echo RGUSB_NATIVE_OK; else echo RGUSB_NATIVE_FAIL; fi";
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
@@ -143,13 +172,31 @@ internal sealed class UsbEngineRunner
                 psi.ArgumentList.Add(arg);
             using var process = Process.Start(psi);
             if (process is null) return false;
-            Task<string> readOut = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            Task<string> readErr = process.StandardError.ReadToEndAsync(timeout.Token);
-            await process.WaitForExitAsync(timeout.Token);
-            await Task.WhenAll(readOut, readErr);
-            return process.ExitCode == 0;
+            try
+            {
+                Task<string> readOut = process.StandardOutput.ReadToEndAsync(timeout.Token);
+                Task<string> readErr = process.StandardError.ReadToEndAsync(timeout.Token);
+                await process.WaitForExitAsync(timeout.Token);
+                string stdout = await readOut;
+                await readErr;
+                return NativeProbeSucceeded(process.ExitCode, stdout);
+            }
+            catch (OperationCanceledException)
+            {
+                // Dispose() does not terminate a running adb.exe. Reap the
+                // timed-out probe so repeated 15-second checks cannot pile up.
+                try
+                {
+                    if (!process.HasExited) process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None);
+                }
+                catch (InvalidOperationException) { /* already exited */ }
+                catch (System.ComponentModel.Win32Exception) { /* process already gone */ }
+                return false;
+            }
         }
-        catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException)
+        catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException
+            or System.ComponentModel.Win32Exception)
         {
             return false;
         }

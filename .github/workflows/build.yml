@@ -89,12 +89,32 @@ jobs:
         with:
           name: embedded-backend-development-payload
           path: artifacts/backend-download/
+      - name: Generate multi-resolution icon for both Windows executables
+        shell: pwsh
+        run: |
+          ./scripts/Build-AppIcon.ps1
+          if (!(Test-Path assets/knulli-usb-link.ico)) {
+            throw 'App icon generation failed.'
+          }
       - name: Restore
         run: dotnet restore src/Connector/Connector.csproj
       - name: Build
         run: dotnet build src/Connector/Connector.csproj --no-restore --configuration Release
-      - name: Publish self-contained Windows EXE
-        run: dotnet publish src/Connector/Connector.csproj --no-restore --configuration Release --runtime win-x64 -p:PublishSingleFile=true -p:SelfContained=true --output artifacts/windows
+      - name: Publish framework-dependent Windows EXE
+        run: dotnet publish src/Connector/Connector.csproj --no-restore --configuration Release --runtime win-x64 -p:PublishSingleFile=true -p:SelfContained=false --output artifacts/windows
+      - name: Compile small .NET Framework 4.x first-run launcher
+        shell: pwsh
+        run: |
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (!(Test-Path $csc)) { throw 'Windows .NET Framework compiler not available.' }
+          $launcherSource = (Resolve-Path '.\\src\\Launcher\\Launcher.cs').Path
+          $launcherOutput = Join-Path (Resolve-Path '.\\artifacts\\windows').Path 'KNULLI USB Link.exe'
+          $icon = (Resolve-Path 'assets/knulli-usb-link.ico').Path
+          & $csc /nologo /target:winexe /platform:x64 "/out:$launcherOutput" "/win32icon:$icon" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.dll $launcherSource
+          if ($LASTEXITCODE -ne 0) { throw 'Lightweight launcher compilation failed.' }
+          $launcher = (Resolve-Path 'artifacts/windows/KNULLI USB Link.exe').Path
+          $p = Start-Process -FilePath $launcher -ArgumentList '--self-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Lightweight first-run launcher self-test failed.' }
       - name: Assemble portable program folder
         shell: pwsh
         run: |
@@ -107,11 +127,38 @@ jobs:
           $exe = (Resolve-Path ".\artifacts\windows\RG35XXUsbInternetConnector.exe").Path
           $proc = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Self-test failed with exit code $($proc.ExitCode)" }
-      - name: Package portable ZIP distribution
+      - name: Verify headless OpenSSH password helper (no SSH server needed)
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe").Path
+          $psi = [Diagnostics.ProcessStartInfo]::new()
+          $psi.FileName = $exe
+          $psi.UseShellExecute = $false
+          $psi.CreateNoWindow = $true
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.ArgumentList.Add("root@127.0.0.1's password:")
+          $psi.Environment["RG35XX_USB_SSH_ASKPASS"] = "1"
+          $p = [Diagnostics.Process]::Start($psi)
+          try {
+            if (!$p.WaitForExit(15000)) {
+              $p.Kill($true)
+              throw "Password helper failed to exit."
+            }
+            $answer = $p.StandardOutput.ReadToEnd().Trim()
+            if ($p.ExitCode -ne 0 -or $answer -ne "linux") {
+              throw "Headless password helper failed without a user-visible prompt."
+            }
+            Write-Host "Headless SSH_ASKPASS helper responds through stdout successfully."
+          } finally { $p.Dispose() }
+      - name: Package small portable ZIP distribution
         shell: pwsh
         run: |
           New-Item -Force -ItemType Directory dist | Out-Null
           Compress-Archive -Path artifacts/windows/* -DestinationPath dist/RG35XX-USB-Internet-Connector-dev.zip -CompressionLevel Optimal
+          $size = (Get-Item dist/RG35XX-USB-Internet-Connector-dev.zip).Length
+          Write-Host "Framework-dependent portable ZIP size: $([Math]::Round($size / 1MB, 2)) MiB."
+          if ($size -gt 30MB) { throw 'Portable ZIP regressed above 30 MiB.' }
       - name: Validate distribution ZIP with the actual Windows EXE
         shell: pwsh
         run: |

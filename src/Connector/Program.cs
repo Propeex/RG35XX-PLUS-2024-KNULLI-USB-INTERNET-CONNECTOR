@@ -8,6 +8,13 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // ssh.exe launches this same single-file WinExe as its SSH_ASKPASS
+        // helper. Handle it before the GUI and mutex without displaying UI.
+        if (Environment.GetEnvironmentVariable(SshPasswordBridge.ModeVariable) == "1")
+        {
+            Environment.ExitCode = SshPasswordBridge.Respond(args);
+            return;
+        }
         if (args.Length == 1 && args[0] == "--self-test")
         {
             Environment.ExitCode = SelfTests.Run();
@@ -40,7 +47,20 @@ internal static class Program
             UpdateWorker.Apply(args);
             return;
         }
+        // Only one instance may own the ADB port, SSH PID file or the update
+        // staging directory. A second launch must never interfere with them.
+        using var singleInstance = new System.Threading.Mutex(
+            initiallyOwned: true,
+            name: @"Local\RG35XX_KNULLI_USB_Internet_Connector",
+            createdNew: out bool createdNew);
         ApplicationConfiguration.Initialize();
+        if (!createdNew)
+        {
+            MessageBox.Show("USB Internet Connector is already running.",
+                "RG35XX USB Internet Connector",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         Application.Run(new BootstrapForm());
     }
 }

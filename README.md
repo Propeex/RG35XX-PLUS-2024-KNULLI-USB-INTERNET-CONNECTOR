@@ -1,6 +1,8 @@
 # RG35XX+ (2024) KNULLI USB Internet Connector
 
-**Status: early development / beta preparation. No tested EXE release yet.**
+**Status: experimental v0.1.0-beta.1 prerelease.** One hardware tester confirmed a successful KNULLI USB Internet connection; final START/STOP UI transitions, ADB cleanup, fresh-runtime setup, and automatic updating are **not yet hardware-verified**. Do not mistake beta availability for a stable release.
+
+**Beta download:** [GitHub Releases — v0.1.0-beta.1](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/releases/tag/v0.1.0-beta.1). Extract the full portable ZIP, then run **`KNULLI USB Link.exe`**.
 
 A Windows desktop utility for sharing a PC's internet connection with the **Anbernic RG35XX+ (2024 edition, no built-in Wi-Fi)** running KNULLI, using a USB-C cable—without a Wi-Fi dongle.
 
@@ -25,7 +27,7 @@ A Windows desktop utility for sharing a PC's internet connection with the **Anbe
 
 The legacy **v1.4 USB network backend** was tested successfully on RG35XX+ (2024) with KNULLI Scarab (2026-05-11): ADB, SSH reverse SOCKS tunnel, TUN/tun2socks, DNS, and native HTTPS. ScreenScraper, theme downloads, and PortMaster updates/installs also worked after device-side compatibility fixes.
 
-**Important:** The later legacy v1.5–v1.6 ZIP prototypes were *not* fully verified end to end on the physical device. The new EXE is a fresh, tracked implementation and is **not yet released or claimed to work**.
+**Important:** The later legacy v1.5–v1.6 ZIP prototypes were *not* fully verified end to end on the physical device. On 2026-11-16 the user reported a successful full Internet connection using the development EXE after adding KNULLI default-password SSH fallback. This is one positive hardware observation, **not** repeatable START/STOP, status-indicator, or exit-cleanup validation.
 
 ## Development & continuity
 
@@ -59,17 +61,17 @@ To be determined after auditing the legacy backend and bundled dependencies. Do 
 
 1. First launch: a **separate startup/setup screen** may show real download progress for the application and Google's Platform-Tools. Once setup finishes, open the main UI.
 2. Subsequent launches: automatically check/apply updates **before** opening the main UI; a minimal status-only startup window is allowed, but show **no progress bars**.
-3. **Never include any update progress controls in the main interface.** The main interface contains the title, language selector, real-time connection status, one central connect/disconnect button and an English log only.
+3. **Never include application/SDK update progress controls in the main interface.** Manual USB Internet START/STOP now has a separate progress bar showing completed backend stages while the operation runs, as requested by the user.
 4. As of the merged GUI foundation (PR #6), self-update and official SDK installation code **build and pass offline smoke tests in Windows CI, but require fresh-Windows and real-device validation**, and the USB network engine is still pending. Do not mistake a development build artifact for a release.
 
 ## Portable folder distribution — development build
 
-Following the first real GUI screenshot and user feedback, the delivery format is **a ZIP of a folder**, not a lone EXE. Download the `gui-development-build` artifact, extract it, then launch `RG35XXUsbInternetConnector.exe` beside its readable `backend/` directory. The current CI also produces `windows-portable-zip` for testing the complete future release format.
+Following user hardware feedback, the delivery format is **a small ZIP of a folder**, not a lone self-contained EXE. Download the newest successful `windows-portable-zip` build, extract the inner ZIP, then launch **`KNULLI USB Link.exe`**. A small Windows .NET Framework 4.x launcher selects language and, only when missing, asks permission to install Microsoft's .NET 8 Desktop Runtime once for the current user. The internal `RG35XXUsbInternetConnector.exe` is framework-dependent; `backend/` remains readable and hash-verified. Do not directly launch the internal EXE on machines lacking .NET 8.
 
 The EXE automatically installs **Google's official Android SDK Platform-Tools into `platform-tools/` beside itself**, not into a hidden global folder. The first-run setup asks for language (Korean, English, Japanese) **before** showing a localized Google SDK license dialog. Language and setup markers are saved in `data/`, while SSH private keys and sensitive logs remain private in the Windows user's `%LOCALAPPDATA%`. The main GUI continues to have one Connect/Disconnect button and no update progress bar.
 
 The ADB probe now recognizes tab/space-separated `adb devices -l` output and checks app port 5056 as well as the standard port 5037 when necessary, without intentionally terminating a shared ADB daemon. It displays serial-redacted English diagnostics in the activity log. These changes address the user's report that a physically connected device appeared disconnected; **actual physical re-testing is still required**.
 
-Future GitHub Release application updates must provide `RG35XX-USB-Internet-Connector.zip`, which includes the EXE plus backend; the updater stages/verifies and swaps both while preserving `platform-tools/` and `data/`.
+Future GitHub Release application updates must provide `RG35XX-USB-Internet-Connector.zip`, containing the launcher, framework-dependent EXE and backend. The updater stages/verifies and swaps the set together while preserving `platform-tools/` and `data/`.
 
 See [portable Korean install guide](docs/PORTABLE_INSTALL_KR.md) and [real device QA](docs/BACKEND_TESTING.md). The developer build has passed several CI stages but is **not a verified hardware-ready Beta Release**.

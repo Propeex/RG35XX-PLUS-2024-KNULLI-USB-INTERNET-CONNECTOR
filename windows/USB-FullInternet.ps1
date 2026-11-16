@@ -76,20 +76,28 @@ function Discover() {
         Fail 'KNULLI ADB shell must have root privileges.'
     }
 }
+# Some KNULLI adbd versions do not forward the remote shell's exit status.
+# Explicit result markers avoid false positives from "adb shell test ..." returning 0.
+function RemoteCheck([string]$Condition) {
+    $r = RunAdb @('shell',"if $Condition; then echo RGUSB_PRESENT; else echo RGUSB_ABSENT; fi")
+    if ($r.Code -ne 0) { Fail ("ADB remote state probe failed (exit {0})." -f $r.Code) }
+    $answer = $r.Text.Trim()
+    if ($answer -eq 'RGUSB_PRESENT') { return $true }
+    if ($answer -eq 'RGUSB_ABSENT') { return $false }
+    Fail 'ADB remote state probe produced an unexpected response; refusing to guess.'
+}
 function Exists([string]$Remote) {
-    $r = RunAdb @('shell',"test -e $Remote")
-    return ($r.Code -eq 0)
+    return (RemoteCheck "test -e '$Remote'")
 }
 function TunExists() {
-    $r = RunAdb @('shell','ip link show rgusb0 >/dev/null 2>&1')
-    return ($r.Code -eq 0)
+    return (RemoteCheck 'ip link show rgusb0 >/dev/null 2>&1')
 }
 function CheckNative() {
     $r = RunAdb @('shell',"curl --noproxy '*' --max-time 15 -sSI https://example.com")
     return ($r.Code -eq 0 -and $r.Text -match '(?m)^HTTP/(?:1\.[01]|2|3)\s+[23][0-9][0-9]')
 }
 function CheckSocks() {
-    $r = RunAdb @('shell','curl --max-time 8 -sSI --socks5-hostname 127.0.0.1:1080 https://example.com')
+    $r = RunAdb @('shell','curl --connect-timeout 2 --max-time 4 -sSI --socks5-hostname 127.0.0.1:1080 https://example.com')
     return ($r.Code -eq 0 -and $r.Text -match '(?m)^HTTP/(?:1\.[01]|2|3)\s+[23][0-9][0-9]')
 }
 function Push([string]$Local,[string]$Remote) {
@@ -105,16 +113,32 @@ function PrepareStop() {
 function StopDevice() {
     Log 'Stopping KNULLI TUN, DNS helper and temporary route.'
     if (Exists "$script:base/stop-fullnet.sh") {
-        $r = RunAdb @('shell',"sh $script:base/stop-fullnet.sh")
-        if ($r.Text) { Log $r.Text }
-        if ($r.Code -ne 0) { Fail 'KNULLI STOP reported incomplete cleanup; no forced deletion attempted.' }
+        # Make the remote exit code observable even when adbd returns success for
+        # an unsuccessful shell command.
+        $command = 'sh {0}/stop-fullnet.sh; exitcode=$?; echo RGUSB_STOP_EXIT:$exitcode' -f $script:base
+        $r = RunAdb @('shell',$command)
+        $output = ($r.Text -replace '(?m)^RGUSB_STOP_EXIT:[0-9]+\s*$','').Trim()
+        if ($output) { Log $output }
+        if ($r.Code -ne 0 -or $r.Text -notmatch '(?m)^RGUSB_STOP_EXIT:0\s*$') {
+            Fail 'KNULLI STOP reported incomplete cleanup or could not return its exit status.'
+        }
     } elseif ((Exists "$script:base/active") -or (TunExists)) {
         Fail 'Active network artifacts exist, but the owned STOP script is missing.'
     }
-    if ((Exists "$script:base/active") -or (TunExists)) {
-        Fail 'KNULLI STOP verification failed: active flag or rgusb0 still exists.'
+    # Check each independently, and permit a brief interface teardown delay.
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        $activePresent = Exists "$script:base/active"
+        $tunPresent = TunExists
+        Log ("STOP verification {0}/4: active={1}; rgusb0={2}." -f
+            $attempt,$activePresent,$tunPresent)
+        if (-not $activePresent -and -not $tunPresent) {
+            Log 'KNULLI STOP verified: owned active flag and rgusb0 removed.'
+            return
+        }
+        if ($attempt -lt 4) { Start-Sleep -Milliseconds 500 }
     }
-    Log 'KNULLI STOP verified: owned active flag and rgusb0 removed.'
+    Fail ("KNULLI STOP verification failed: active={0}; rgusb0={1}." -f
+        $activePresent,$tunPresent)
 }
 function ProcessForOwnedSSH() {
     $pidfile = Join-Path $script:state 'ssh.pid'
@@ -123,9 +147,14 @@ function ProcessForOwnedSSH() {
     if ($text -notmatch '^[0-9]+$') { return $null }
     $p = Get-CimInstance Win32_Process -Filter "ProcessId=$text" -ErrorAction SilentlyContinue
     if (-not $p -or $p.Name -ne 'ssh.exe') { return $null }
-    if ($p.CommandLine -notmatch 'rg35xx_usb_gui_ed25519' -or
+    # Public-key setup can fail while the user successfully authenticates
+    # with the KNULLI password. Such a session has no -i key argument.
+    # Require our private diagnostics path and the exact loopback tunnel
+    # instead of the optional identity filename.
+    if ($p.CommandLine -notmatch 'ssh-client\.log' -or
         $p.CommandLine -notmatch 'root@127\.0\.0\.1' -or
-        $p.CommandLine -notmatch '(\s|^)-R\s+1080(\s|$)') { return $null }
+        $p.CommandLine -notmatch '(\s|^)-R\s+1080(\s|$)' -or
+        $p.CommandLine -notmatch '(\s|^)-p\s+2222(\s|$)') { return $null }
     return $p
 }
 function StopOwnedSSH() {
@@ -185,10 +214,29 @@ function InstallKey() {
     if ($pub -notmatch '^ssh-ed25519 [A-Za-z0-9+/=]+ rg35xx-usb-gui$') {
         Fail 'SSH public key has an unexpected format.'
     }
+    # Mismatched private/public keys otherwise fail silently at the SSH server.
+    # Compare the public part derived from the private key, preserving both.
+    $sshgen = CommandPath 'ssh-keygen.exe'
+    $derived = & $sshgen -y -f $key 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Fail 'Connector private SSH key cannot be read; no credentials were modified.'
+    }
+    $derivedParts = (($derived | Out-String).Trim() -split '\s+')
+    $publicParts = ($pub -split '\s+')
+    if ($derivedParts.Count -lt 2 -or
+        $derivedParts[0] -ne $publicParts[0] -or
+        $derivedParts[1] -ne $publicParts[1]) {
+        Fail 'Connector SSH public/private keys differ; no credentials were overwritten.'
+    }
     [void](MustAdb @('shell',"mkdir -p $script:base") 'create device directory')
     Push (Join-Path $script:root 'device/setup-ssh-key.sh') "$script:base/setup-ssh-key.sh"
     [void](MustAdb @('shell',"chmod 755 $script:base/setup-ssh-key.sh") 'chmod key installer')
-    [void](MustAdb @('shell',"sh $script:base/setup-ssh-key.sh '$pub'") 'register public key')
+    $registration = RunAdb @('shell',"sh $script:base/setup-ssh-key.sh '$pub'")
+    if ($registration.Code -ne 0 -or $registration.Text -notmatch '(?m)^RGUSB_SSH_KEY_READY\s*$') {
+        # ADB exit status by itself is not proof that the remote installer ran.
+        Fail ("Device SSH public-key registration could not be verified: " + $registration.Text)
+    }
+    Log 'Device SSH public key registration verified.'
     return $key
 }
 function StartSSH() {
@@ -200,29 +248,81 @@ function StartSSH() {
         return
     }
     StopOwnedSSH
-    $key = InstallKey
+    $key = $null
+    try {
+        $key = InstallKey
+    } catch {
+        # KNULLI supports password authentication too. An unavailable key
+        # registration must not block this known-good firmware login method.
+        Log ("SSH public-key setup unavailable; trying password authentication: " + $_.Exception.Message)
+    }
     $ssh = CommandPath 'ssh.exe'
+    $askpassExe = Join-Path (Split-Path -Parent $script:root) 'RG35XXUsbInternetConnector.exe'
+    Need $askpassExe
     $known = Join-Path $script:state 'known_hosts'
     $sshlog = Join-Path $script:state 'ssh-client.log'
+    # Reset previous attempts so the private log describes this connection only.
+    [IO.File]::WriteAllText($sshlog,'',(New-Object Text.UTF8Encoding($false)))
     $info = New-Object Diagnostics.ProcessStartInfo
     $info.FileName = $ssh
-    $info.Arguments = ('-N -T -o BatchMode=yes -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" -i "{2}" -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog,$key)
+    $keyArg = if ($key) { ('-i "{0}"' -f $key) } else { '' }
+    # Try the connector-owned key first; if KNULLI rejects it, askpass
+    # supplies one automatic "linux" password response. The password is
+    # never written to the SSH command line or any file.
+    $info.Arguments = ('-v -N -T -o BatchMode=no -o NumberOfPasswordPrompts=1 -o IdentitiesOnly=yes -o PreferredAuthentications=publickey,password -o PasswordAuthentication=yes -o KbdInteractiveAuthentication=no -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" {2} -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog,$keyArg)
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    # OpenSSH invokes our own published WinExe as SSH_ASKPASS; no third-party
+    # sshpass or external credential helper is needed. Windows OpenSSH 8.6+
+    # requires SSH_ASKPASS_REQUIRE=force for noninteractive prompts.
+    $info.EnvironmentVariables['SSH_ASKPASS'] = $askpassExe
+    $info.EnvironmentVariables['SSH_ASKPASS_REQUIRE'] = 'force'
+    $info.EnvironmentVariables['RG35XX_USB_SSH_ASKPASS'] = '1'
+    $info.EnvironmentVariables['DISPLAY'] = 'localhost:0'
     $p = [Diagnostics.Process]::Start($info)
     [IO.File]::WriteAllText((Join-Path $script:state 'ssh.pid'),[string]$p.Id)
     $script:sshStartedHere = $true
-    for ($i=0; $i -lt 18; $i++) {
-        Start-Sleep -Seconds 2
+    # A fixed 2-second sleep before each 8-second curl could make tunnel
+    # setup appear frozen. Probe immediately with a short timeout, bounded
+    # by one absolute deadline regardless of individual command duration.
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    $lastProgress = [DateTime]::UtcNow
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if ($p.HasExited) { break }
         if (CheckSocks) {
             [IO.File]::WriteAllText((Join-Path $script:state 'adb-port.txt'),$script:port)
+            # Report the authentication mechanism, not the credential. This
+            # makes it easy to confirm whether password fallback was used.
+            if (Test-Path -LiteralPath $sshlog) {
+                $authLog = Get-Content -LiteralPath $sshlog -Raw -ErrorAction SilentlyContinue
+                if ($authLog -match '(?:using "password"|Authentication succeeded \(password\))') {
+                    Log 'SSH authentication succeeded via automatic KNULLI default password.'
+                } elseif ($authLog -match '(?:using "publickey"|Authentication succeeded \(publickey\))') {
+                    Log 'SSH authentication succeeded via connector-owned public key.'
+                }
+            }
             Log 'Background SSH reverse SOCKS tunnel verified.'
             return
         }
-        if ($p.HasExited) { break }
+        if ([DateTime]::UtcNow -ge $lastProgress.AddSeconds(12)) {
+            Log 'Waiting for SSH reverse SOCKS tunnel to become ready.'
+            $lastProgress = [DateTime]::UtcNow
+        }
+        Start-Sleep -Milliseconds 700
     }
     StopOwnedSSH
+    # Auth diagnostics are stored privately. Classify the common case in the
+    # GUI without exposing the public key, serial or private SSH material.
+    if (Test-Path -LiteralPath $sshlog) {
+        $sshReason = Get-Content -LiteralPath $sshlog -Raw -ErrorAction SilentlyContinue
+        if ($sshReason -match 'Permission denied \(publickey(?:,password)?\)') {
+            Fail 'KNULLI SSH authentication rejected both configured methods (owned key and default firmware password). Confirm SSH is enabled and the root password is still the default; see the private ssh-client.log.'
+        }
+        if ($sshReason -match 'remote port forwarding failed') {
+            Fail 'KNULLI SSH server rejected reverse SOCKS forwarding on port 1080.'
+        }
+    }
     Fail ("SSH tunnel failed. Review the private diagnostic file: " + $sshlog)
 }
 function Deploy() {
@@ -253,6 +353,7 @@ function StartInternet() {
     $tun = TunExists
     if ($active -and (CheckNative)) {
         Log 'Existing USB native HTTPS connection is healthy.'
+        Log 'RGUSB_NATIVE_HTTPS_OK: direct HTTPS verified on KNULLI.'
         Push (Join-Path $script:root 'device/compat-fullnet.sh') "$script:base/compat-fullnet.sh"
         [void](MustAdb @('shell',"chmod 755 $script:base/compat-fullnet.sh") 'chmod compatibility')
         ApplyCompatibility
@@ -268,19 +369,24 @@ function StartInternet() {
         StopDevice
         StopOwnedSSH
     }
+    Log 'Stage USB forwarding: configuring ADB TCP port 2222.'
     [void](MustAdb @('forward','tcp:2222','tcp:22') 'USB SSH port forwarding')
     $utc = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     [void](MustAdb @('shell',"date -u -s @$utc") 'set device clock')
+    Log 'Stage SSH/SOCKS: establishing authenticated reverse tunnel.'
     StartSSH
+    Log 'Stage device payload: uploading verified ARM64 binaries and scripts.'
     Deploy
     # KNULLI may have /etc/resolv.conf -> ../tmp/resolv.conf with a missing target.
     $resolver = RunAdb @('shell',
         'if [ "$(readlink /etc/resolv.conf 2>/dev/null)" = "../tmp/resolv.conf" ] && [ ! -e /tmp/resolv.conf ]; then touch /tmp/resolv.conf; fi')
     if ($resolver.Code -ne 0) { Fail 'Cannot prepare KNULLI volatile resolver target.' }
+    Log 'Stage TUN/DNS: starting device TUN interface and DNS-over-HTTPS.'
     Log 'Starting device TUN and DNS-over-HTTPS.'
     $result = RunAdb @('shell',"sh $script:base/start-fullnet.sh")
     if ($result.Text) { Log $result.Text }
     if ($result.Code -ne 0) { Fail 'KNULLI TUN/DNS startup failed.' }
+    Log 'Stage native HTTPS: validating DNS, route and direct HTTPS without proxy settings.'
     $ok = $false
     for ($attempt=0; $attempt -lt 3; $attempt++) {
         if (CheckNative) { $ok = $true; break }
@@ -290,6 +396,10 @@ function StartInternet() {
         try { StopDevice } catch { Log ("Recovery warning: " + $_.Exception.Message) }
         Fail 'Native DNS and HTTPS verification failed after TUN startup.'
     }
+    # A failed optional compatibility step must not erase observed native
+    # Internet success. GUI consumes this proof separately from the exit code.
+    Log 'RGUSB_NATIVE_HTTPS_OK: direct HTTPS verified on KNULLI.'
+    Log 'Stage compatibility: applying KNULLI IP recognition and PortMaster startup guards.'
     ApplyCompatibility
     $script:connectionHealthy = $true
     Log 'Connected: native HTTPS, IP display and PortMaster compatibility applied.'
@@ -313,9 +423,13 @@ try {
         'start' { StartInternet }
         'status' { ShowStatus }
         'stop' {
+            Log 'Stage STOP preparation: verifying owned cleanup script.'
             PrepareStop
+            Log 'Stage STOP device: restoring resolver and removing TUN.'
             StopDevice
+            Log 'Stage STOP SSH: stopping connector-owned tunnel.'
             StopOwnedSSH
+            Log 'Stage STOP ADB: shutting down connector-owned server.'
             StopOwnedAdb
             Log 'STOP completed and verified.'
         }

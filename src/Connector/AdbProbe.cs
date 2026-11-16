@@ -43,16 +43,19 @@ internal static class AdbProbe
     private static string ParseState(string listing)
     {
         string result = "none";
+        int ready = 0;
         foreach (string line in listing.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             string[] columns = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (columns.Length < 2) continue;
             string state = columns[1].Trim();
-            if (state == "device") return "device";
+            if (state == "device") ready++;
             if (state == "unauthorized") result = "unauthorized";
             if (state == "offline" && result != "unauthorized") result = "offline";
         }
-        return result;
+        // The PowerShell engine requires exactly one authorized device.
+        if (ready > 1) return "multiple";
+        return ready == 1 ? "device" : result;
     }
 
     private sealed record ProbeResult(bool Ready, string State);
@@ -61,7 +64,7 @@ internal static class AdbProbe
     {
         if (!File.Exists(AppPaths.AdbPath)) return new ProbeResult(false, "ADB not installed");
 
-        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(9));
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var start = new ProcessStartInfo(AppPaths.AdbPath)
         {
             UseShellExecute = false,
@@ -95,7 +98,7 @@ internal static class AdbProbe
         }
     }
 
-    private static async Task StopDedicatedAsync()
+    internal static async Task StopDedicatedAsync()
     {
         if (!File.Exists(AppPaths.AdbPath)) return;
         using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -108,9 +111,11 @@ internal static class AdbProbe
         };
         foreach (string arg in new[] { "-P", DedicatedPort, "kill-server" })
             start.ArgumentList.Add(arg);
+
+        Process? proc = null;
         try
         {
-            using var proc = Process.Start(start);
+            proc = Process.Start(start);
             if (proc is null) return;
             Task<string> output = proc.StandardOutput.ReadToEndAsync(cancel.Token);
             Task<string> error = proc.StandardError.ReadToEndAsync(cancel.Token);
@@ -120,43 +125,58 @@ internal static class AdbProbe
         catch (Exception ex) when (ex is OperationCanceledException or IOException
                 or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            // ADB may already have exited; a failed stop must not crash the GUI.
+            // Reap our own ADB client if kill-server takes too long.
+            try
+            {
+                if (proc is not null && !proc.HasExited)
+                    proc.Kill(entireProcessTree: true);
+            }
+            catch (Exception e) when (e is InvalidOperationException
+                or System.ComponentModel.Win32Exception) { }
         }
+        finally { proc?.Dispose(); }
     }
 
-    internal static async Task<bool> HasReadyDeviceAsync(bool keepServer = false)
+    internal static async Task<bool> HasReadyDeviceAsync(
+        bool keepServer = false, bool allowFallback = true)
     {
         string preferred = ServerPort;
         var first = await QueryAsync(preferred);
         if (first.Ready)
         {
-            if (!keepServer && preferred == DedicatedPort)
-                await StopDedicatedAsync();
+            // Keep the app-owned ADB daemon available for subsequent polls and
+            // for Connect. Killing it every 2.5s caused repeated cold starts.
             Volatile.Write(ref _lastDiagnostic,
                 "ADB device ready (server " + preferred +
                 (preferred == SharedPort ? ", shared)" : ", app-owned)"));
             return true;
         }
 
-        if (!keepServer && preferred == DedicatedPort)
-            await StopDedicatedAsync();
+        // During START/STOP, use only the existing selected ADB server.
+        // Starting another server could disrupt an in-flight SSH forward.
+        if (!allowFallback)
+        {
+            Volatile.Write(ref _lastDiagnostic,
+                "ADB device not ready on server " + preferred +
+                " during USB operation (" + first.State + ").");
+            return false;
+        }
 
+        // Probe both servers without repeatedly killing the dedicated one.
+        // Repeated stop/start cycles caused USB readiness flicker.
         string alternative = preferred == DedicatedPort ? SharedPort : DedicatedPort;
         var second = await QueryAsync(alternative);
         if (second.Ready)
         {
             Volatile.Write(ref _selectedPort, alternative);
-            if (alternative == DedicatedPort && !keepServer)
-                await StopDedicatedAsync();
             Volatile.Write(ref _lastDiagnostic,
                 "ADB device ready (server " + alternative +
                 (alternative == SharedPort ? ", shared; reused existing ADB)" : ", app-owned)"));
             return true;
         }
-        if (alternative == DedicatedPort && !keepServer)
-            await StopDedicatedAsync();
-
-        string reason = first.State == "unauthorized" || second.State == "unauthorized"
+        string reason = first.State == "multiple" || second.State == "multiple"
+            ? "Multiple authorized ADB devices detected; disconnect other devices."
+            : first.State == "unauthorized" || second.State == "unauthorized"
             ? "ADB device unauthorized. Check device authorization."
             : first.State == "offline" || second.State == "offline"
                 ? "ADB device offline. Check USB cable and KNULLI ADB mode."

@@ -10,7 +10,7 @@ internal record SdkPackage(Version Revision, Uri Url, string? Sha256);
 
 /// <summary>
 /// Official Google Platform-Tools bootstrap/update.
-/// Separate LOCALAPPDATA folder prevents locking the application executable.
+/// The SDK is staged and installed beside the portable executable.
 /// All extraction is staged and validated before changing the active directory.
 /// </summary>
 internal static class PlatformToolsService
