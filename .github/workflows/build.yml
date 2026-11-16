@@ -9,8 +9,61 @@ permissions:
   contents: read
 
 jobs:
+  backend:
+    name: Assemble auditable ARM64 backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Install Go 1.23
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: native/go.mod
+      - name: Check scripts and Go code
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in native/device/*.sh; do sh -n "$script"; done
+          (cd native && go test ./...)
+      - name: Build device binaries and fetch pinned upstream tun2socks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/bin bundle/device bundle/third_party download
+          export GOOS=linux GOARCH=arm64 CGO_ENABLED=0
+          (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/daemon-launch-arm64 ./cmd/daemon-launch)
+          (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/dns-bridge-arm64 ./cmd/dns-bridge)
+          (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/tunctl-arm64 ./cmd/tunctl)
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://github.com/xjasonlyu/tun2socks/releases/download/v2.7.0/tun2socks-linux-arm64.zip' \
+            --output download/tun2socks.zip
+          echo '3931476c9cfa8fa236d23aeaf36767df0eb27cc11ecaab699faba57744450f49  download/tun2socks.zip' | sha256sum --check -
+          unzip -q download/tun2socks.zip -d download/unpacked
+          tunbin="$(find download/unpacked -type f -iname 'tun2socks*' | head -n 1)"
+          test -n "$tunbin"
+          file "$tunbin" | grep -E 'ELF 64-bit.*(ARM aarch64|aarch64)'
+          cp "$tunbin" bundle/bin/tun2socks-arm64
+          cp native/device/*.sh bundle/device/
+          cp windows/USB-FullInternet.ps1 bundle/
+          cp third_party/tun2socks-LICENSE.txt bundle/third_party/
+          cd bundle
+          find bin device third_party -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
+          sha256sum USB-FullInternet.ps1 >> SHA256SUMS
+          zip -q -r ../backend.zip bin device third_party USB-FullInternet.ps1 SHA256SUMS
+          unzip -t ../backend.zip | tail -n 1
+      - name: Upload complete embedded payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedded-backend-development-payload
+          path: backend.zip
+          if-no-files-found: error
+          retention-days: 7
+
   build:
+    name: Windows GUI + embedded network backend
     runs-on: windows-latest
+    needs: backend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,16 +71,34 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Parse and validate tracked Windows PowerShell 5.1 orchestrator
+        shell: powershell
+        run: |
+          $scriptPath = Join-Path $PWD "windows\USB-FullInternet.ps1"
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $scriptPath, [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Host $_.ToString() }
+            throw "PowerShell orchestration has parse errors."
+          }
+          Write-Host "Windows PowerShell orchestrator syntax OK."
+      - name: Download verified backend payload from this workflow
+        uses: actions/download-artifact@v4
+        with:
+          name: embedded-backend-development-payload
+          path: src/Connector/assets/
       - name: Restore
         run: dotnet restore src/Connector/Connector.csproj
       - name: Build
         run: dotnet build src/Connector/Connector.csproj --no-restore --configuration Release
       - name: Publish self-contained Windows EXE
         run: dotnet publish src/Connector/Connector.csproj --no-restore --configuration Release --runtime win-x64 -p:PublishSingleFile=true -p:SelfContained=true --output artifacts/windows
-      - name: Smoke test published EXE (no network or GUI)
+      - name: Smoke test EXE including embedded backend (offline)
         shell: pwsh
         run: |
-          $exe = (Resolve-Path ".\\artifacts\\windows\\RG35XXUsbInternetConnector.exe").Path
+          $exe = (Resolve-Path ".\artifacts\windows\RG35XXUsbInternetConnector.exe").Path
           $proc = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Self-test failed with exit code $($proc.ExitCode)" }
       - name: Save test build (NOT a GitHub Release)

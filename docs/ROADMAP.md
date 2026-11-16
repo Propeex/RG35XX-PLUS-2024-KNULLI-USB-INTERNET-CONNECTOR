@@ -6,7 +6,7 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [x] Write public README and accurate support scope
 - [x] Record real-device findings and previous failures
 - [x] Specify app architecture, UI contract, update strategy, security and release policy
-- [ ] Audit legacy helper licenses and migrate reproducible backend source
+- [x] Migrate tracked Windows/Go/shell sources, preserve tun2socks v2.7.0 MIT notice, and pin upstream SHA-256 (CI; hardware test pending)
 - [x] Add a Windows desktop source project and CI build (PR #6, CI verified; not hardware tested)
 
 ## Phase 1 — Working Windows GUI skeleton (development branch; CI pending)
@@ -79,8 +79,8 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [x] Separate owned ADB port 5056 from unrelated applications; preserve active tunnel during UI polling/reopen.
 - [x] Migrate Go native helper sources, tests, and KNULLI device shell scripts to `native/`.
 - [x] GitHub Actions Linux ARM64 helper cross-build/test and shell syntax validation.
-- [ ] Migrate/rewrite entire Windows PowerShell orchestration into the repository and remove legacy ZIP requirement.
-- [ ] Integrate reproducibly built helpers into an automatically prepared signed/verified backend installer.
+- [x] Track a Windows PowerShell 5.1 orchestrator under windows/ and remove the historical ZIP importer.
+- [x] Build ARM64 helpers and hash-pinned MIT tun2socks in CI; embed a checksummed backend in the single EXE (unsigned developer build).
 - [ ] Test the new EXE start/stop, SSH key setup, native DNS, ScreenScraper, theme and PortMaster on the physical device.
 - [ ] Test unplug/reconnect, stale active flag, Windows process cleanup and recovery on the real device.
 - [ ] Merge an acceptable milestone; create a **beta** Release only when actual functionality and update installer are tested.
@@ -88,4 +88,15 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 ### Merged development checkpoint
 
 - [x] PR #7 merged into main (`669f7da`): hidden GUI-to-backend bridge, native Go/shell source and CI.
-- [ ] No successful physical device test on the new EXE yet; original local v1.6 ZIP still required. **Do not publish beta as working until that dependency is eliminated and tests pass.**
+- [ ] No successful physical device test on the new EXE yet; EXE now embeds the backend without a historical ZIP (not yet physically validated). **Do not publish beta as working until that dependency is eliminated and tests pass.**
+
+## Embedded backend milestone (branch feature/embedded-usb-engine)
+
+- [x] CI builds three Go ARM64 helpers and checks POSIX device scripts.
+- [x] CI downloads xjasonlyu/tun2socks v2.7.0, checks the published SHA-256 and includes its MIT notice.
+- [x] CI parses the tracked Windows PowerShell 5.1 orchestrator.
+- [x] Embedded ZIP verified with per-file hashes and extracted to versioned user-data folder; no manual legacy ZIP.
+- [x] Single Windows EXE build and offline embedded-backend smoke test passed in GitHub Actions.
+- [ ] Physical Windows 10/11 + RG35XX+ (2024) start/stop/PortMaster and stale-state QA.
+- [ ] Test first-run official Google Platform-Tools bootstrap, EXE self-update/restart/rollback.
+- [ ] Independent security/ownership review and code signing before stable public release.

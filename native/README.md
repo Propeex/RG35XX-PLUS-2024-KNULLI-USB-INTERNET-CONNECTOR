@@ -13,3 +13,7 @@ They use only Go's standard library. The native CI workflow tests the DNS code a
 ## Device shell scripts
 
 Original KNULLI `start-fullnet.sh`, `stop-fullnet.sh`, `compat-fullnet.sh`, `check-fullnet.sh`, `watch-fullnet.sh` and `setup-ssh-key.sh` have been migrated into `native/device/`. The Linux CI workflow validates their POSIX shell syntax. This is source audit/migration, **not** evidence of automatic deployment or physical-device reliability.
+
+## CI embedding pipeline
+
+The primary GitHub Actions Windows build workflow now compiles the three Go ARM64 helpers, verifies the exact upstream xjasonlyu/tun2socks v2.7.0 ARM64 ZIP SHA-256, includes `third_party/tun2socks-LICENSE.txt`, bundles the tracked PowerShell + shell sources with `SHA256SUMS`, and embeds them in the WinForms EXE. No historical local ZIP is required for that build. `native.yml` continues to test and independently build native ARM64 helpers. This is not evidence of real-device runtime success.

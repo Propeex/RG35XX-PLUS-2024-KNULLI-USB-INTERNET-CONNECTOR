@@ -81,3 +81,15 @@ Languages: ko-KR, en-US, ja-JP. Language selection updates UI immediately and is
 ### Active tunnel and startup updates
 
 If `%LOCALAPPDATA%\RG35XX_USB_FullNet\ssh.pid` exists, the bootstrap **defers EXE and Google Platform-Tools updates** while keeping the already installed ADB, to prevent replacing a locked binary or killing the live SSH forward. Disconnect and restart to resume update checks. This marker is conservative and may be stale; the one-button GUI can attempt STOP and leave logs rather than silently clearing unknown remote state.
+
+## Successor: source-tracked, embedded USB engine (2026-11-16)
+
+The earlier **experimental legacy-ZIP bridge** section above documents history and is now **superseded**. The actively developed implementation does **not** ask users to copy an old ZIP.
+
+- `windows/USB-FullInternet.ps1` is tracked in the repository and passes Windows PowerShell 5.1 parser checks in CI.
+- Linux ARM64 Go binaries are compiled from `native/` in the same GitHub Actions workflow; xjasonlyu/tun2socks v2.7.0 is downloaded during CI after exact SHA-256 verification, including its original MIT attribution.
+- GitHub Actions packs `USB-FullInternet.ps1`, KNULLI scripts, Go helpers, tun2socks, license and a SHA256SUMS manifest into `backend.zip`. Windows .NET publishing embeds it as a single-file EXE resource.
+- `UsbBackendBundle` first verifies the embedded ZIP and each payload file, stages to an application-owned temporary folder, then installs under a **content-addressed** backend version folder so a working connection's binaries are never overwritten in place.
+- `UsbEngineRunner` invokes the extracted PowerShell script with `RG35XX_ADB_EXE` pointing to official Platform-Tools and dedicated ADB server port 5056. It reports English activity summaries and checks native HTTPS before the GUI displays Connected.
+- Only the **first-run separate bootstrap screen** has a progress bar; the main UI never has update progress.
+- CI is a source/package test, **not** a real-device test. The app updater, SDK first-run installer, OpenSSH key installation, tunnel lifecycle, unplug/stop and PortMaster still require Windows/KNULLI QA.

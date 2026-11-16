@@ -84,17 +84,17 @@ internal sealed class StartupService
         if (!File.Exists(AppPaths.AdbPath))
             throw new FileNotFoundException("Platform-Tools installation finished without adb.exe.");
 
-        progress.Report(new StartupStep("Checking local USB network backend..."));
+        progress.Report(new StartupStep("Verifying embedded USB network backend..."));
         try
         {
-            await LegacyEngineBundle.EnsureLocalImportAsync(log, cancellation);
+            await UsbBackendBundle.EnsureInstalledAsync(log, cancellation);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                 or InvalidDataException)
         {
             // The backend is optional for GUI development builds. Never silently
             // trust a malformed archive; leave the Connect button unavailable.
-            log("Local engine import rejected: " + ex.Message);
+            log("Embedded engine unavailable or invalid: " + ex.Message);
         }
 
         progress.Report(new StartupStep("Startup checks completed."));

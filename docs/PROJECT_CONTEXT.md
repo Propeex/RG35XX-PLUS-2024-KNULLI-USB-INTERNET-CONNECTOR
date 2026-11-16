@@ -95,3 +95,11 @@ Give the assistant this GitHub repo URL, ask it to **read README.md, docs/PROJEC
 - Main GUI has single Connect/Disconnect backed by hidden PowerShell using a **separately supplied SHA-pinned v1.6 legacy ZIP**. This is a transitional developer bridge, NOT a verified standalone connector.
 - Bootstrap defers app and Platform-Tools updates if the app's prior SSH PID marker remains, to avoid modifying locked adb.exe during an active tunnel.
 - Next priority: migrate Windows orchestrator and package audited helpers directly so no old ZIP is required; then user physical test and prerelease. Keep issue #4 open.
+
+## Latest developer checkpoint: embedded backend (2026-11-16)
+
+- The former `LegacyEngineBundle` manual v1.6 ZIP importer has been replaced with `UsbBackendBundle`, embedding the complete backend inside the EXE in CI. Users should **not** need to supply any historical v1.x ZIP for the new development build.
+- Windows network orchestration now lives at `windows/USB-FullInternet.ps1`, derived from direct inspection of the old v1.6 script and preserving the tested v1.4 architecture. The new source has **not** undergone hardware testing.
+- CI builds ARM64 helper binaries from `native/`, downloads verified tun2socks v2.7.0 with its upstream MIT license, builds the resource ZIP, parses PowerShell 5.1 code, creates a self-contained Windows EXE, and executes embedded-hash smoke tests.
+- EXE extracts its embedded backend into a content-addressed directory under `%LOCALAPPDATA%`, never updating active helper files in place. Its hidden SSH/TUN/DNS orchestrator still uses app-specific ADB port 5056.
+- Next work: manual first-run bootstrap, USB connection/stop/reconnect/PortMaster and GitHub self-update QA on real Windows + RG35XX+ (2024). Hardware tests NOT complete; no GitHub Release yet.

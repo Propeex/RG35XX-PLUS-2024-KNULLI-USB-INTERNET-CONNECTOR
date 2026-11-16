@@ -9,18 +9,18 @@ internal enum EngineAction { Start, Stop, Status }
 internal sealed record EngineResult(bool Success, string DiagnosticLog, int ExitCode);
 
 /// <summary>
-/// Runs the preserved v1.6 PowerShell backend with NO visible console and with
+/// Runs the source-tracked USB PowerShell backend with NO visible console and with
 /// application-managed Google adb.exe. This is a transitional, hardware-test
 /// integration: underlying v1.6 automation has not yet passed real-device QA.
 /// </summary>
-internal sealed class LegacyEngineRunner
+internal sealed class UsbEngineRunner
 {
     private readonly SemaphoreSlim _actionGate = new(1, 1);
 
     internal async Task<EngineResult> RunAsync(
         EngineAction action, Action<string> log, CancellationToken cancellation)
     {
-        if (!LegacyEngineBundle.Installed)
+        if (!UsbBackendBundle.Installed)
             throw new InvalidOperationException("No verified USB backend bundle is installed.");
         if (!File.Exists(AppPaths.AdbPath))
             throw new FileNotFoundException("Google adb.exe not installed.", AppPaths.AdbPath);
@@ -36,8 +36,7 @@ internal sealed class LegacyEngineRunner
                 _ => throw new ArgumentOutOfRangeException(nameof(action))
             };
 
-            // The diagnostics are kept in Windows user data. The GUI never
-            // displays the legacy backend's untranslated logs.
+            // The diagnostics are kept in Windows user data. The GUI receives bounded, English-only activity logs.
             string logs = Path.Combine(AppPaths.BaseDirectory, "backend-logs");
             Directory.CreateDirectory(logs);
             string logfile = Path.Combine(logs,
@@ -49,14 +48,14 @@ internal sealed class LegacyEngineRunner
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
-                WorkingDirectory = LegacyEngineBundle.Folder,
+                WorkingDirectory = UsbBackendBundle.Folder,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
             foreach (string arg in new[]
             {
                 "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-File", LegacyEngineBundle.Script, "-Action", token, "-LogFile", logfile
+                "-File", UsbBackendBundle.Script, "-Action", token, "-LogFile", logfile
             })
                 psi.ArgumentList.Add(arg);
 
@@ -80,6 +79,18 @@ internal sealed class LegacyEngineRunner
                 await process.WaitForExitAsync(timeout.Token);
                 string stdout = await outputTask;
                 string stderr = await errorTask;
+                // The source-tracked orchestrator writes English lines into
+                // this private file; reflect them in the GUI after completion.
+                // Avoid forwarding raw adb stdout or private SSH material.
+                if (File.Exists(logfile))
+                {
+                    foreach (string line in File.ReadLines(logfile).TakeLast(160))
+                    {
+                        if (line.Length > 0 && line.Length < 1200
+                            && !line.Contains("PRIVATE KEY", StringComparison.OrdinalIgnoreCase))
+                            log(line);
+                    }
+                }
                 if (process.ExitCode == 0)
                 {
                     log("USB backend operation succeeded: " + token);

@@ -1,45 +1,57 @@
-# Developer test: temporary USB engine bridge
+# RG35XX+ (2024) USB Internet Connector — hardware QA
 
-> **Not a production installer or a tested beta.** See issue #4. The old v1.6 network scripts were not fully validated on the user's physical device; only the historical v1.4 TUN/DNS network was verified.
+> **Development build only.** The embedded backend builds and passes offline tests in GitHub Actions. It has **not yet been verified on the actual RG35XX+ (2024)**. The historical v1.4 manual setup was tested, not this new EXE.
 
-## Why the temporary ZIP requirement exists
+## What changed
 
-This repo now contains the source for the three native Linux ARM64 Go helpers and the KNULLI shell scripts. However, the full Windows v1.6 PowerShell orchestration is being audited/migrated separately, and the new EXE's native build packaging has not been finished. We deliberately **do not redistribute an opaque legacy ZIP** in a public EXE.
+- **No historical v1.4/v1.6 ZIP is required.** GitHub Actions builds three ARM64 Go helpers from tracked source and downloads the official MIT-licensed xjasonlyu/tun2socks v2.7.0 ARM64 release with a pinned SHA-256 check.
+- The complete, checksummed backend (Go helpers, six KNULLI shell scripts, tracked Windows PowerShell orchestrator, and third-party license) is embedded into the single Windows EXE.
+- On startup, the EXE extracts a verified version into a private, content-addressed subfolder of `%LOCALAPPDATA%\RG35XXUsbInternetConnector\backend`. It **does not overwrite running helpers**.
+- The first-ever startup may display a separate setup progress bar. Later launches perform update checks before the main screen without a progress bar. **No update progress appears in the main GUI.**
+- Only one central button controls **Connect / Disconnect**. All GUI action logs are English; Korean, English and Japanese are supported for buttons/status labels.
+- Native DNS/HTTPS must work before the GUI displays `Connected`. The displayed status is not inferred from an old active flag or merely from ADB presence.
 
-For local device testing, the GUI can import exactly one historical archive by a pinned SHA-256:
+## Obtain a development EXE
 
-- Filename: `RG35XX_2024_USB_Full_Internet_v1_6_GUI.zip`
-- SHA-256: `3f69756af1825eb6738dca25e0c9222dc43d17991fbc051670fce7f5778d015d`
-- This ZIP originally came from the earlier ChatGPT conversation; there is **no public download URL** for it in this repo. Do not accept similarly named unverified ZIPs.
+1. Visit the [GitHub Actions build runs](../actions/workflows/build.yml). Select the newest **successful** run on `feature/embedded-usb-engine` (or `main` after merging).
+2. Download the short-lived artifact named `gui-development-build`. Extract it to a **new Windows folder**.
+3. Run `RG35XXUsbInternetConnector.exe`. Do **not** copy a historical ZIP into that folder, and do not place the EXE in the Android Platform-Tools folder.
+4. Do **not** expect a published GitHub Release until hardware validation is complete.
 
-## How to test the current development EXE
+## First physical-device test
 
-1. Visit GitHub Actions for this branch and choose the latest **successful** `Windows EXE build (development)` run. Obtain its short-lived `gui-development-build` artifact and extract it. This is **not** a GitHub Release.
-2. Copy your exact historical `RG35XX_2024_USB_Full_Internet_v1_6_GUI.zip` next to `RG35XXUsbInternetConnector.exe` (not into Platform-Tools).
-3. In PowerShell, verify the old archive before running:
-   `(Get-FileHash .\RG35XX_2024_USB_Full_Internet_v1_6_GUI.zip -Algorithm SHA256).Hash`
-   It must equal the SHA-256 above.
-4. On the handheld, ensure KNULLI USB MODE=ADB, SSH=ON. Connect by USB-C to Windows 10/11. The Windows OpenSSH Client (`ssh.exe` and `ssh-keygen.exe`) must be installed.
-5. Launch the EXE. On first setup, accept the Google Android SDK terms if you agree. Platform-Tools are downloaded from Google into `%LOCALAPPDATA%\RG35XXUsbInternetConnector\platform-tools`.
-6. The startup importer verifies the old ZIP SHA and extracts it into the application-owned user-data directory. It updates **only** the legacy script's local ADB path so that the EXE uses the newly installed official Platform-Tools.
-7. Once the device is ready, click **Connect Internet**. This launches a **hidden PowerShell** process, which starts the existing SSH/TUN/DNS scripts and tests native HTTPS.
-8. If it reports Connected, check KNULLI IP display, ScreenScraper, theme downloads and PortMaster.
-9. Click **Disconnect Internet** and verify KNULLI returns to its prior network state. Test unplug/reconnect only after the initial start/stop test works.
+0. Back up a known-working old v1.4 folder and any current device config. Do not delete/replace your working setup. End the old SSH/CMD tunnel and run its STOP script **before** testing the new EXE, if possible.
+1. Windows 10/11 x64: make sure `ssh.exe` and `ssh-keygen.exe` are available from the Windows OpenSSH Client optional component. Windows internet is required for the first Google Platform-Tools download.
+2. On RG35XX+ (2024): KNULLI Scarab; enable USB ADB and SSH, connect via a working USB-C data cable.
+3. Start EXE. Review the Google SDK license prompt. On first launch, Platform-Tools are downloaded from the official Google repository to `%LOCALAPPDATA%\RG35XXUsbInternetConnector\platform-tools`. The embedded network files are verified and extracted locally.
+4. Once `Device ready` appears, click the **single Connect Internet button**. The backend checks root ADB access, creates an app-specific SSH key, sets up ADB forward `tcp:2222` to KNULLI SSH, starts a hidden reverse SSH SOCKS tunnel and deploys TUN/DNS helpers.
+5. Wait for the GUI to report **Connected** and check KNULLI system network status: `rgusb0` and IP display. Test ScreenScraper download, theme download and PortMaster startup/update/port installation.
+6. Click **Disconnect Internet**. Confirm the GUI reports disconnected, SSH/ADB owned by the connector stop, KNULLI `rgusb0` is removed, native route/resolver restored, and game/PortMaster files remain untouched.
+7. Only after the above pass, test the failure paths: unplug during connection, unplug during STOP, stale TUN state, quit-with-connection-running, reconnect and repeat connection twice.
 
-## Troubleshooting / reporting
+## Important safety limits
 
-- English GUI activity log contains high-level operation and failure messages.
-- Full legacy backend diagnostic logs (historically Korean+English) are retained under `%LOCALAPPDATA%\RG35XXUsbInternetConnector\backend-logs`. They are **not** shown directly inside the English-only GUI log.
-- Windows SSH key and owned PID information are stored under `%LOCALAPPDATA%\RG35XX_USB_FullNet`; never upload any SSH private key or known_hosts file. Scrub usernames and ADB serials from logs before filing a public issue.
-- Imported engine is left untouched while running. If its import directory is incomplete, stop any legacy sessions before correcting it; the app refuses to replace live executable files automatically.
-- The current imported v1.6 backend uses an isolated ADB server port `5056`; GUI status polling preserves it while its SSH tunnel may still be active. An explicit STOP shuts down that app-specific server (not other apps' default 5037).
-- If the device disconnects during STOP, the old backend still tries to stop Windows-owned SSH and ADB; KNULLI-side cleanup cannot be verified until the device reconnects.
-- Do **not** run `taskkill /F /IM adb.exe` without understanding it kills unrelated debugging sessions.
+- **Do not** run this experimental EXE while a separate instance of the previous manual tunnel is working. The engine refuses some unrelated active SOCKS and TUN states; it does not intentionally take ownership of them.
+- It uses a dedicated ADB server port `5056`; unrelated normal ADB clients generally use `5037`. No blind `taskkill /F /IM adb.exe`.
+- If USB is unplugged during STOP, the Windows SSH/ADB cleanup can be attempted but KNULLI remote cleanup **cannot be confirmed**. A failed STOP is not a success.
+- On restart with an existing connector SSH PID marker, EXE and Google Platform-Tools updates are **deferred** rather than overwriting an active ADB/SSH process. Disconnect before expecting updates.
+- OpenSSH host-key checks use a private `known_hosts` file; the app does not bypass host-key verification.
+- SSH private key is created only in the Windows user's data folder and must **never** be added to GitHub or attached to a bug report.
+- USB TUN/tun2socks was proven for ordinary TCP/DNS/HTTPS on the older build. UDP/ICMP, all PortMaster games and automatic reconnection are **not guaranteed**.
+- The application EXE is currently unsigned and has not undergone installer/AV compatibility QA.
 
-## Outstanding acceptance criteria
+## Logs and bug reports
 
-- Validate a fresh Windows first-run download, update and restart flow (issues #2/#3).
-- Migrate v1.6 PowerShell orchestration to tracked source, audit and eliminate legacy ZIP import.
-- Integrate the reproducibly built ARM64 helper binaries from native CI into a signed/verified EXE installation procedure.
-- Test start/stop/recovery on actual RG35XX+ (2024), including stale active state, USB cable unplug, restart, and PortMaster.
-- Release beta only after user reports successful hardware testing.
+- GUI bottom panel: English activity log.
+- Full per-operation diagnostic files: `%LOCALAPPDATA%\RG35XXUsbInternetConnector\backend-logs`.
+- Owned SSH PID/key/host records: `%LOCALAPPDATA%\RG35XX_USB_FullNet` (do **not** share private keys).
+- Backend version directories: `%LOCALAPPDATA%\RG35XXUsbInternetConnector\backend`.
+- For a failure report, record the button clicked, the English error, stage and Windows/KNULLI versions. **Redact** local user paths, ADB serial numbers, host keys and secrets from public issues.
+
+## Release gates
+
+GitHub Actions (Windows compiler, Windows PowerShell parser, embedded SHA-256 validator, Go tests/ARM64 binaries and shell syntax) is necessary but **not sufficient** for a Beta Release.
+
+Before a GitHub prerelease, confirm real-device startup, connect, stop, restart, stale state cleanup, IP display, native HTTPS, ScreenScraper, themes and PortMaster. Then validate Google Platform-Tools bootstrap and at least one GitHub EXE auto-update/restart and rollback case.
+
+See [issue #4](../issues/4), [roadmap](ROADMAP.md), [architecture](ARCHITECTURE.md) and [development log](DEVELOPMENT_LOG.md).

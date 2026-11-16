@@ -49,7 +49,7 @@ All code changes should be visible in GitHub commits or PRs, and each tested mil
 
 ## Source status
 
-The previous PowerShell/ADB/TUN helper scripts and compiled ARM64 helpers are historical prototypes; licensing and provenance of any redistributed third-party components must be confirmed before public packaging. **Do not advertise this repository as a working downloadable application until a Windows EXE and its packaged backend have passed real-device testing.**
+Current source includes the **tracked Windows PowerShell orchestrator**, KNULLI shell scripts, and reproducible Go ARM64 helpers. GitHub Actions assembles a SHA-256 verified backend with upstream MIT-licensed tun2socks v2.7.0, embeds it in a self-contained Windows EXE, and runs offline build/syntax/integrity checks. **Do not advertise it as fully working until real-device tests pass.**
 
 ## License
 
@@ -62,10 +62,10 @@ To be determined after auditing the legacy backend and bundled dependencies. Do 
 3. **Never include any update progress controls in the main interface.** The main interface contains the title, language selector, real-time connection status, one central connect/disconnect button and an English log only.
 4. As of the merged GUI foundation (PR #6), self-update and official SDK installation code **build and pass offline smoke tests in Windows CI, but require fresh-Windows and real-device validation**, and the USB network engine is still pending. Do not mistake a development build artifact for a release.
 
-## Experimental USB backend bridge (development only)
+## Embedded USB backend — developer build only
 
-Issue #4 is being implemented on PR #7. The new WinForms EXE now contains an **experimental one-button Connect / Disconnect bridge** to the historical PowerShell/ADB/SSH/TUN engine, including native HTTPS health verification and owner-aware STOP. This does **not** mean the new EXE has been tested on hardware.
+Issue #4 has progressed beyond the earlier manual legacy ZIP importer. The new EXE carries a complete, checksum-verified network payload assembled by CI; **no v1.4/v1.6 ZIP needs to be copied alongside the program**. Windows PowerShell orchestration is tracked in [windows/USB-FullInternet.ps1](windows/USB-FullInternet.ps1). ARM64 device helpers and scripts are under [native/](native/); xjasonlyu/tun2socks v2.7.0 is pinned and its MIT license is preserved under [third_party/](third_party/).
 
-For now, the developer EXE imports the precise old v1.6 ZIP **from next to the EXE** after checking its pinned SHA-256. We intentionally do not publish that unreviewed binary bundle. See [backend test instructions](docs/BACKEND_TESTING.md).
+The GUI has one central Connect/Disconnect action, requires native HTTPS to display Connected, and has no update progress in the main window. All update/setup work happens before main GUI, with a progress bar only on first run.
 
-The underlying Go ARM64 helpers and KNULLI shell sources are being migrated into [native/](native/), with reproducible Go tests and ARM64 CI builds. The remaining PowerShell/source audit, automatic packaging, and physical-device tests must pass before any Beta GitHub Release.
+**Hardware validation is still pending.** Use the [development build/testing guide](docs/BACKEND_TESTING.md). Do not publish a user-facing beta Release until the real RG35XX+ (2024) test and update-restart tests pass.

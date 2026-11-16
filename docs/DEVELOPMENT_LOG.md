@@ -50,3 +50,14 @@
 - PR #7 merged as `669f7da87fff8d3e04732f20b3507627435e0d3d` after Windows build/smoke tests and native Go/shell CI passed.
 - The EXE source now has a functional **developer/test-only** hidden PowerShell Connect/Disconnect path when the exact local legacy ZIP is supplied. This has NOT been tested on the handheld and is not self-contained yet.
 - Issue #4 stays open for audited packaging, source migration of Windows orchestration and real-device tests. No Beta Release/tag was created.
+
+## 2026-11-16 — Replace old ZIP with embedded, source-tracked backend
+
+- Reopened historical `RG35XX_2024_USB_Full_Internet_v1_6_GUI.zip` and `USB-FullInternet.ps1`, checked exact archive SHA, and used it as reference for a new English-logging PowerShell orchestrator at `windows/USB-FullInternet.ps1`.
+- Added `UsbBackendBundle` and removed the old `LegacyEngineBundle` manual ZIP import; renamed runner to `UsbEngineRunner`.
+- Added backend assembly job to Windows CI: Go ARM64 builds, shell tests, pinned upstream tun2socks release SHA verification, MIT notice, checksum manifest, embedded EXE resource, Powershell 5.1 parser validation, EXE publish and offline embedded-payload integrity tests.
+- Runtime backend extraction now stages content under a SHA-256 based version directory in LocalAppData and refuses to overwrite corrupted or potentially active files.
+- Original UI policy preserved: no update progress in main window; first-run setup progress only; program title, KO/EN/JA status/button translations, single connect/disconnect button, English logs.
+- Completed GitHub Actions run `43795735996` passed ARM64 packaging, Windows PowerShell 5.1 syntax, Windows EXE compilation/publish and offline embedded-file smoke tests. **Physical RG35XX and update/restart tests are still outstanding.**
+- Updated `docs/BACKEND_TESTING.md` for a test EXE without any old ZIP, and retained legacy historical milestones in the log for future context.
+- No GitHub Release/tag created until physical-user acceptance tests pass.
