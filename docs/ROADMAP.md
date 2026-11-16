@@ -100,3 +100,12 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] Physical Windows 10/11 + RG35XX+ (2024) start/stop/PortMaster and stale-state QA.
 - [ ] Test first-run official Google Platform-Tools bootstrap, EXE self-update/restart/rollback.
 - [ ] Independent security/ownership review and code signing before stable public release.
+
+
+## Latest PR #8 checkpoint
+
+- [x] PR #8 embedded backend merged into `main` (`b8e58e197b`), CI build/syntax/SHA256 tests passed.
+- [x] No external historical ZIP required for developer EXE.
+- [ ] Real Windows 10/11 + RG35XX+ (2024) first-run and USB connection/disconnection verification.
+- [ ] GitHub self-update and Platform-Tools update/restart regression testing.
+- [ ] Publish `v0.1.0-beta.1` or later only after those checks pass.

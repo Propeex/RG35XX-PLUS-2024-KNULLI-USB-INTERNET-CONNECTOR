@@ -61,3 +61,11 @@
 - Completed GitHub Actions run `43795735996` passed ARM64 packaging, Windows PowerShell 5.1 syntax, Windows EXE compilation/publish and offline embedded-file smoke tests. **Physical RG35XX and update/restart tests are still outstanding.**
 - Updated `docs/BACKEND_TESTING.md` for a test EXE without any old ZIP, and retained legacy historical milestones in the log for future context.
 - No GitHub Release/tag created until physical-user acceptance tests pass.
+
+
+## 2026-11-16 — Embedded engine source milestone merged
+
+- PR #8 ([link](../pull/8)) squash-merged to `main`: `b8e58e197b0505e90ad61d399cd0f54c041c9956`.
+- GitHub Actions [run 43796188343](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/actions/runs/43796188343) passed all native and Windows build, PowerShell parse, embedded SHA-256 and offline smoke tests.
+- Confirmed downloadable `gui-development-build` artifact; this is **not** a GitHub Release or evidence of actual RG35XX+ hardware operation.
+- [Issue #4](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/issues/4) remains open for physical device validation. No prerelease has been published.

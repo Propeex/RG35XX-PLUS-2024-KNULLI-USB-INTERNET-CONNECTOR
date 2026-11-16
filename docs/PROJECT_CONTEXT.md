@@ -103,3 +103,13 @@ Give the assistant this GitHub repo URL, ask it to **read README.md, docs/PROJEC
 - CI builds ARM64 helper binaries from `native/`, downloads verified tun2socks v2.7.0 with its upstream MIT license, builds the resource ZIP, parses PowerShell 5.1 code, creates a self-contained Windows EXE, and executes embedded-hash smoke tests.
 - EXE extracts its embedded backend into a content-addressed directory under `%LOCALAPPDATA%`, never updating active helper files in place. Its hidden SSH/TUN/DNS orchestrator still uses app-specific ADB port 5056.
 - Next work: manual first-run bootstrap, USB connection/stop/reconnect/PortMaster and GitHub self-update QA on real Windows + RG35XX+ (2024). Hardware tests NOT complete; no GitHub Release yet.
+
+
+## Most recent repository checkpoint (2026-11-16, after PR #8)
+
+- `main` includes CI-embedded single EXE backend; historical ZIP import has been removed.
+- PR #8 merge commit: `b8e58e197b0505e90ad61d399cd0f54c041c9956`.
+- Full passing CI run: `43796188343`. Its **development build** artifact is `gui-development-build`, not a release.
+- Main action is still one Connect/Disconnect toggle; locale affects buttons/status; activity logs English; update progress **only on the first-run bootstrap screen** and never in main UI.
+- Do not label the new EXE functional or stable until the user's physical Windows/RG35XX+ startup, network, STOP and PortMaster tests pass. Issue #4 remains open.
+- Source-of-truth for future ChatGPT sessions: README, ARCHITECTURE, ROADMAP, DEVELOPMENT_LOG, BACKEND_TESTING, open issues and Releases.
