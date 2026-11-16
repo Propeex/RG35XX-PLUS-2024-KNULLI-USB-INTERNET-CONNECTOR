@@ -9,6 +9,9 @@ internal static class Program
     private static void Main()
     {
         ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+
+        // Every launch finishes dependency checks BEFORE the main window exists.
+        // Only a first-time install shows a determinate download progress bar.
+        Application.Run(new BootstrapForm());
     }
 }
