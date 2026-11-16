@@ -291,8 +291,10 @@ internal sealed class MainForm : Form
         try
         {
             bool keepServer = _mayHaveActiveSession || _internetHealthy || _busy;
+            // A live tunnel was forwarded through a specific ADB server.
+            // Never silently switch ports while its SSH ownership marker exists.
             bool ready = await AdbProbe.HasReadyDeviceAsync(
-                keepServer, allowFallback: !_busy);
+                keepServer, allowFallback: !_busy && !_mayHaveActiveSession);
             if (_closed || IsDisposed) return;
 
             string detail = AdbProbe.LastDiagnostic;
