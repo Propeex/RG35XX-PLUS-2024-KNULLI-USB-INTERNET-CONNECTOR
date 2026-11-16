@@ -212,7 +212,12 @@ function InstallKey() {
     [void](MustAdb @('shell',"mkdir -p $script:base") 'create device directory')
     Push (Join-Path $script:root 'device/setup-ssh-key.sh') "$script:base/setup-ssh-key.sh"
     [void](MustAdb @('shell',"chmod 755 $script:base/setup-ssh-key.sh") 'chmod key installer')
-    [void](MustAdb @('shell',"sh $script:base/setup-ssh-key.sh '$pub'") 'register public key')
+    $registration = RunAdb @('shell',"sh $script:base/setup-ssh-key.sh '$pub'")
+    if ($registration.Code -ne 0 -or $registration.Text -notmatch '(?m)^RGUSB_SSH_KEY_READY\s*$') {
+        # ADB exit status by itself is not proof that the remote installer ran.
+        Fail ("Device SSH public-key registration could not be verified: " + $registration.Text)
+    }
+    Log 'Device SSH public key registration verified.'
     return $key
 }
 function StartSSH() {
@@ -228,9 +233,11 @@ function StartSSH() {
     $ssh = CommandPath 'ssh.exe'
     $known = Join-Path $script:state 'known_hosts'
     $sshlog = Join-Path $script:state 'ssh-client.log'
+    # Reset previous attempts so the private log describes this connection only.
+    [IO.File]::WriteAllText($sshlog,'',(New-Object Text.UTF8Encoding($false)))
     $info = New-Object Diagnostics.ProcessStartInfo
     $info.FileName = $ssh
-    $info.Arguments = ('-N -T -o BatchMode=yes -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" -i "{2}" -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog,$key)
+    $info.Arguments = ('-v -N -T -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" -i "{2}" -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog,$key)
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
@@ -256,6 +263,17 @@ function StartSSH() {
         Start-Sleep -Milliseconds 700
     }
     StopOwnedSSH
+    # Auth diagnostics are stored privately. Classify the common case in the
+    # GUI without exposing the public key, serial or private SSH material.
+    if (Test-Path -LiteralPath $sshlog) {
+        $sshReason = Get-Content -LiteralPath $sshlog -Raw -ErrorAction SilentlyContinue
+        if ($sshReason -match 'Permission denied \(publickey(?:,password)?\)') {
+            Fail 'SSH root public-key authentication rejected by KNULLI. Key registration was verified; check server key permissions and private SSH log.'
+        }
+        if ($sshReason -match 'remote port forwarding failed') {
+            Fail 'KNULLI SSH server rejected reverse SOCKS forwarding on port 1080.'
+        }
+    }
     Fail ("SSH tunnel failed. Review the private diagnostic file: " + $sshlog)
 }
 function Deploy() {
