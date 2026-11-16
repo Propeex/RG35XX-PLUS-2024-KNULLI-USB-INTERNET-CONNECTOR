@@ -124,6 +124,10 @@ internal sealed class BootstrapForm : Form
         _stage.Visible = true;
         _progress.Visible = _firstLaunch;
         _details.Visible = _firstLaunch;
+        // Lift the compact language-dialog bounds before expanding to the
+        // localized setup screen; otherwise MaximumSize clips the controls.
+        MinimumSize = Size.Empty;
+        MaximumSize = Size.Empty;
         ClientSize = new Size(580, _firstLaunch ? 322 : 145);
         MinimumSize = MaximumSize = Size;
         Text = T(_firstLaunch ? "Welcome" : "Checking");
