@@ -11,7 +11,7 @@ A Windows desktop utility for sharing a PC's internet connection with the **Anbe
 - Launch a **Windows EXE** and show a lightweight native GUI.
 - Check **GitHub Releases** on launch, safely update the application, then restart.
 - Download the official **Android SDK Platform-Tools for Windows** on first launch; check and update subsequent installations.
-- Show **real progress bars** for application and Platform-Tools downloads, verification, and installation.
+- Show update/download progress **only during first-time setup in a separate startup window**. On all later launches check/apply updates **before** entering the main UI, without any progress bars in the main UI.
 - Display the application title at upper left and a language selector at upper right.
 - Translate only **buttons and status labels**; keep diagnostic logs in **English**.
 - Show continuously updated USB/device/internet connection status beneath the title.
@@ -54,3 +54,10 @@ The previous PowerShell/ADB/TUN helper scripts and compiled ARM64 helpers are hi
 ## License
 
 To be determined after auditing the legacy backend and bundled dependencies. Do not assume third-party binaries can be redistributed.
+
+### Startup and update UI policy (approved 2026-11-16)
+
+1. First launch: a **separate startup/setup screen** may show real download progress for the application and Google's Platform-Tools. Once setup finishes, open the main UI.
+2. Subsequent launches: automatically check/apply updates **before** opening the main UI; a minimal status-only startup window is allowed, but show **no progress bars**.
+3. **Never include any update progress controls in the main interface.** The main interface contains the title, language selector, real-time connection status, one central connect/disconnect button and an English log only.
+4. As of this development branch, self-update and official SDK installation code are implemented but **await Windows CI and real-device validation**, and the USB network engine is still pending. Do not mistake a development build artifact for a release.
