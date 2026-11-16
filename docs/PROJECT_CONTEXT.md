@@ -85,3 +85,5 @@ Give the assistant this GitHub repo URL, ask it to **read README.md, docs/PROJEC
 - Windows ADB server is assigned port 5056 for the connector. GUI conservatively recognizes a preexisting owned SSH PID marker to avoid killing the tunnel on GUI restart. It can request Windows-side STOP even after USB unplug, but remote cleanup remains unverified offline.
 - Original Go sources for tunctl, dns-bridge and daemon-launch and the KNULLI device shell scripts are now under native/. GitHub Actions tests and cross-compiles Go ARM64 tools. External tun2socks v2.7.0 pinned ZIP SHA-256 matches upstream GitHub asset.
 - **Not complete:** migration of the Windows PowerShell source, full self-contained binary packaging, first-run/reconnect physical QA and release. See docs/BACKEND_TESTING.md.
+
+- Added a startup safeguard: when the previous GUI's SSH PID marker remains, skip both EXE and Platform-Tools replacements until the user safely disconnects. This prevents startup failures caused by Windows file locks after choosing to keep internet running in background.
