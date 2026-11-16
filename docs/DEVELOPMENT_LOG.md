@@ -88,3 +88,9 @@
 - PR #9 squash-merged to main: `5e2a7724a86fa7f790df8d5eb7d53803b7d8916b`.
 - Verified development artifacts existed: `gui-development-build` and `windows-portable-zip`. No GitHub Release was created.
 - Remaining actual-device acceptance: attached USB must display Ready, Connect/Disconnect must work, SSH process lifecycle, KNULLI IP alias, native HTTPS, ScreenScraper, theme download, PortMaster and stale-state recovery. Also test portable ZIP GitHub Release updater restart/rollback and first-run SDK installation with user-selected language.
+
+## 2026-11-16 — USB SSH password regression repair (pending QA)
+
+The user reproduced an SSH key-auth rejection on real KNULLI. Device inspection found root home `/userdata/system`, Dropbear 2024.86 running and exFAT SHARE reporting `777` for the SSH key directory and file. The current tracked Windows script creates/registers a key and uses `BatchMode=yes`, whereas the previously functional workflow accepted an interactive SSH password. The user specifically approved the default `root/linux` password being supplied automatically, with no console window.
+
+The feature branch `fix/password-ssh-background-tunnel` removes the key-registration step from the START path, uses Windows OpenSSH with `SSH_ASKPASS_REQUIRE=force` and a bundled Windows-subsystem Go helper, maintains reverse SOCKS/SSH PID ownership and does not put the password in command-line arguments. CI now cross-builds and smoke-tests the helper. Legacy key-mode PID markers remain recognizable for safe disconnect. This is a code change **pending CI and physical device test**; it is not an asserted functional release.

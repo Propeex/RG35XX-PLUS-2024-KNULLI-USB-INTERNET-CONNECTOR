@@ -136,3 +136,12 @@ GitHub issue #4 remains open for device connection, native HTTPS, PortMaster, ST
 - `gui-development-build` artifact is a ready-to-unzip folder containing the EXE plus `backend/`. The `windows-portable-zip` artifact holds an inner release-format ZIP for testing the complete updater format. Both are **GitHub Actions artifacts**, **not GitHub Releases**.
 - Distribution now uses a folder ZIP, official Platform-Tools adjacent to EXE, data/settings adjacent, private SSH key/logs in per-user LocalAppData. First-run KO/EN/JA selection happens before the localized SDK license consent dialog. Main screen language label no longer has the original 74px width. ADB parsing accepts spaces and tabs and probes 5056 / 5037.
 - **Do not call device false-negative resolved** until the user tests the new EXE and confirms that physical USB attachment is recognized and Connect works. No hardware-ready beta release has been published.
+
+## 2026-11-16 — Real-device SSH auth regression diagnosed after PR #9
+
+- User's GUI log confirmed ADB ready, forwarding configured and public key installed, but Dropbear rejected root public-key authentication.
+- Actual KNULLI root home is `/userdata/system`, SSH server is Dropbear 2024.86, and SHARE is **exFAT**; `/userdata/system/.ssh` and `authorized_keys` report permissions `777`. These are consistent with Dropbear rejecting the installed key.
+- User confirmed that the historical working Windows script prompted for an SSH password, while a terminal stayed open to keep the tunnel alive. The new tracked `windows/USB-FullInternet.ps1` instead explicitly used `BatchMode=yes` and a generated public key. That authentication change is a likely root cause.
+- User requested automatic `root / linux` authentication with no CMD/password windows and background SSH lifetime controlled by the existing Connect/Disconnect button.
+- A repair branch `fix/password-ssh-background-tunnel` changes SSH to password auth via a console-free `SSH_ASKPASS` helper shipped in the portable backend. The helper reads the password from the SSH child environment, rather than a command-line argument; it answers only password prompts for loopback root SSH. The GUI and network architecture otherwise remain unchanged.
+- **Not yet proven on physical Windows/KNULLI device.** Need GitHub CI, successful SSH, native HTTPS, disconnect, reconnect, PortMaster smoke test before merging a verified milestone. Do not release as working without the device checks.

@@ -123,7 +123,11 @@ function ProcessForOwnedSSH() {
     if ($text -notmatch '^[0-9]+$') { return $null }
     $p = Get-CimInstance Win32_Process -Filter "ProcessId=$text" -ErrorAction SilentlyContinue
     if (-not $p -or $p.Name -ne 'ssh.exe') { return $null }
-    if ($p.CommandLine -notmatch 'rg35xx_usb_gui_ed25519' -or
+    # Recognize both the former key-based tunnel and the password-based one.
+    # The PID file is still required, so unrelated SSH processes are untouched.
+    $ownedAuth = ($p.CommandLine -match 'rg35xx_usb_gui_ed25519' -or
+        $p.CommandLine -match 'PreferredAuthentications=password')
+    if (-not $ownedAuth -or
         $p.CommandLine -notmatch 'root@127\.0\.0\.1' -or
         $p.CommandLine -notmatch '(\s|^)-R\s+1080(\s|$)') { return $null }
     return $p
@@ -161,36 +165,10 @@ function CommandPath([string]$Name) {
     if (-not $r) { Fail ("Missing Windows OpenSSH Client component: " + $Name) }
     return $r.Source
 }
-function InstallKey() {
-    $key = Join-Path $script:state 'rg35xx_usb_gui_ed25519'
-    if (-not (Test-Path -LiteralPath $key) -or -not (Test-Path -LiteralPath "$key.pub")) {
-        if ((Test-Path -LiteralPath $key) -or (Test-Path -LiteralPath "$key.pub")) {
-            Fail 'Incomplete connector SSH keypair; refusing to overwrite existing private key.'
-        }
-        Log 'Creating dedicated SSH ed25519 identity.'
-        $sshgen = CommandPath 'ssh-keygen.exe'
-        $info = New-Object Diagnostics.ProcessStartInfo
-        $info.FileName = $sshgen
-        $info.Arguments = ('-q -t ed25519 -N "" -C "rg35xx-usb-gui" -f "{0}"' -f $key)
-        $info.UseShellExecute = $false
-        $info.CreateNoWindow = $true
-        $p = [Diagnostics.Process]::Start($info)
-        if (-not $p.WaitForExit(20000)) {
-            try { $p.Kill() } catch { }
-            Fail 'SSH key generation timed out.'
-        }
-        if ($p.ExitCode -ne 0) { Fail 'SSH key generation failed.' }
-    }
-    $pub = (Get-Content -LiteralPath "$key.pub" -Raw).Trim()
-    if ($pub -notmatch '^ssh-ed25519 [A-Za-z0-9+/=]+ rg35xx-usb-gui$') {
-        Fail 'SSH public key has an unexpected format.'
-    }
-    [void](MustAdb @('shell',"mkdir -p $script:base") 'create device directory')
-    Push (Join-Path $script:root 'device/setup-ssh-key.sh') "$script:base/setup-ssh-key.sh"
-    [void](MustAdb @('shell',"chmod 755 $script:base/setup-ssh-key.sh") 'chmod key installer')
-    [void](MustAdb @('shell',"sh $script:base/setup-ssh-key.sh '$pub'") 'register public key')
-    return $key
-}
+# KNULLI's SHARE partition can be exFAT, where authorized_keys cannot
+# reliably satisfy Dropbear's ownership/permission checks. The connector
+# instead uses its bundled, console-free SSH_ASKPASS helper for the documented
+# default KNULLI root password. No password is passed in process arguments.
 function StartSSH() {
     if (CheckSocks) {
         if (-not (ProcessForOwnedSSH)) {
@@ -200,14 +178,23 @@ function StartSSH() {
         return
     }
     StopOwnedSSH
-    $key = InstallKey
+    $askpass = Join-Path $script:root 'bin/ssh-askpass.exe'
+    Need $askpass
     $ssh = CommandPath 'ssh.exe'
     $known = Join-Path $script:state 'known_hosts'
     $sshlog = Join-Path $script:state 'ssh-client.log'
     $info = New-Object Diagnostics.ProcessStartInfo
     $info.FileName = $ssh
-    $info.Arguments = ('-N -T -o BatchMode=yes -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" -i "{2}" -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog,$key)
+    $info.Arguments = ('-N -T -o BatchMode=no -o NumberOfPasswordPrompts=1 -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog)
     $info.UseShellExecute = $false
+    # Use the OpenSSH askpass protocol without opening a CMD or password window.
+    # 'force' is required by some Windows OpenSSH builds even without a TTY.
+    # The user-approved KNULLI factory default; passed only in child environment.
+    # Never place it in an SSH command line or diagnostic output.
+    $info.EnvironmentVariables['RG35XX_SSH_ASKPASS_VALUE'] = 'linux'
+    $info.EnvironmentVariables['SSH_ASKPASS'] = $askpass
+    $info.EnvironmentVariables['SSH_ASKPASS_REQUIRE'] = 'force'
+    $info.EnvironmentVariables['DISPLAY'] = 'localhost:0'
     $info.CreateNoWindow = $true
     $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
     $p = [Diagnostics.Process]::Start($info)
