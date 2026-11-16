@@ -13,7 +13,23 @@ internal static class AdbProbe
 {
     private const string DedicatedPort = "5056";
     private const string SharedPort = "5037";
-    private static string _selectedPort = DedicatedPort;
+    private static string _selectedPort = LoadPreviousTunnelPort();
+
+    private static string LoadPreviousTunnelPort()
+    {
+        string state = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RG35XX_USB_FullNet");
+        if (!File.Exists(Path.Combine(state, "ssh.pid")))
+            return DedicatedPort;
+        try
+        {
+            string port = File.ReadAllText(Path.Combine(state, "adb-port.txt")).Trim();
+            return port is DedicatedPort or SharedPort ? port : DedicatedPort;
+        }
+        catch (IOException) { return DedicatedPort; }
+        catch (UnauthorizedAccessException) { return DedicatedPort; }
+    }
     private static string _lastDiagnostic = "";
 
     internal static string ServerPort => Volatile.Read(ref _selectedPort);
@@ -122,15 +138,7 @@ internal static class AdbProbe
             return true;
         }
 
-        if (keepServer)
-        {
-            Volatile.Write(ref _lastDiagnostic,
-                "ADB device not ready on existing tunnel server " + preferred +
-                " (" + first.State + ").");
-            return false;
-        }
-
-        if (preferred == DedicatedPort)
+        if (!keepServer && preferred == DedicatedPort)
             await StopDedicatedAsync();
 
         string alternative = preferred == DedicatedPort ? SharedPort : DedicatedPort;
@@ -138,14 +146,14 @@ internal static class AdbProbe
         if (second.Ready)
         {
             Volatile.Write(ref _selectedPort, alternative);
-            if (alternative == DedicatedPort)
+            if (alternative == DedicatedPort && !keepServer)
                 await StopDedicatedAsync();
             Volatile.Write(ref _lastDiagnostic,
                 "ADB device ready (server " + alternative +
                 (alternative == SharedPort ? ", shared; reused existing ADB)" : ", app-owned)"));
             return true;
         }
-        if (alternative == DedicatedPort)
+        if (alternative == DedicatedPort && !keepServer)
             await StopDedicatedAsync();
 
         string reason = first.State == "unauthorized" || second.State == "unauthorized"
