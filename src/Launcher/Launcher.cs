@@ -207,13 +207,12 @@ internal static class Launcher
     private sealed class LanguageDialog : Form
     {
         private readonly ComboBox languages = new ComboBox();
-        private readonly Button next = new Button();
         internal string SelectedLanguage { get; private set; }
 
         internal LanguageDialog()
         {
             Text = "";
-            ClientSize = new Size(430, 140);
+            ClientSize = new Size(430, 95);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen;
             MaximizeBox = false;
@@ -226,19 +225,15 @@ internal static class Launcher
             languages.Location = new Point(155, 26);
             languages.Size = new Size(222, 27);
             languages.Items.AddRange(new object[] { "한국어", "English", "日本語" });
-            languages.SelectedIndexChanged += delegate { next.Enabled = true; };
-            Controls.Add(languages);
-            next.Location = new Point(272, 91);
-            next.Size = new Size(105, 30);
-            next.Text = "OK";
-            next.Enabled = false;
-            next.Click += delegate {
+            // The first screen contains only "Language" and the choices.
+            // Selecting any locale immediately continues in that language.
+            languages.SelectedIndexChanged += delegate {
                 string[] choices = { "ko-KR", "en-US", "ja-JP" };
                 SelectedLanguage = choices[languages.SelectedIndex];
                 DialogResult = DialogResult.OK;
                 Close();
             };
-            Controls.Add(next);
+            Controls.Add(languages);
         }
     }
 
