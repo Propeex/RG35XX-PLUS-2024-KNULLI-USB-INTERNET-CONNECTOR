@@ -8,14 +8,14 @@ using System.Text.Json;
 namespace RG35XXUsbInternetConnector;
 
 /// <summary>
-/// Selects an appropriate GitHub beta/stable release, downloads a single EXE,
-/// verifies GitHub's asset SHA-256 digest and hands off replacement to a copy
+/// Selects a compatible GitHub release and downloads its complete portable ZIP,
+/// verifies SHA-256 and backend contents, then hands off replacement to a copy
 /// of the running application. Never updates by overwriting a running EXE.
 /// </summary>
 internal static class SelfUpdateService
 {
     private const string Repository = "Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR";
-    private const string ExpectedAsset = "RG35XXUsbInternetConnector.exe";
+    private const string ExpectedAsset = PortableUpdatePackage.ReleaseAsset;
     private const string Api = "https://api.github.com/repos/" + Repository + "/releases?per_page=30";
 
     internal static async Task<bool> CheckAndLaunchAsync(
@@ -74,7 +74,7 @@ internal static class SelfUpdateService
         }
         if (binary is null)
         {
-            log("Release " + version + " has no expected Windows EXE asset; skipping.");
+            log("Release " + version + " has no portable ZIP asset; skipping.");
             return false;
         }
 
@@ -102,12 +102,16 @@ internal static class SelfUpdateService
 
         var folder = Path.Combine(AppPaths.BaseDirectory, "updates");
         Directory.CreateDirectory(folder);
-        var downloaded = Path.Combine(folder, "download-" + Guid.NewGuid().ToString("N") + ".exe");
+        var downloaded = Path.Combine(folder, "download-" + Guid.NewGuid().ToString("N") + ".zip");
+        string? stage = null;
+        bool updaterLaunched = false;
         try
         {
             await DownloadAsync(uri, downloaded, expectedSize, progress, ct);
-            progress.Report(new StartupStep("Verifying application update..."));
+            progress.Report(new StartupStep("Verifying application ZIP and backend..."));
             await VerifySha256Async(downloaded, hex, ct);
+            stage = PortableUpdatePackage.StageAndValidate(downloaded);
+            string newExeHash = PortableUpdatePackage.ExeHash(stage);
             string? currentExe = Environment.ProcessPath;
             if (string.IsNullOrWhiteSpace(currentExe) || !File.Exists(currentExe))
                 throw new InvalidOperationException("Cannot locate running executable.");
@@ -122,18 +126,21 @@ internal static class SelfUpdateService
             start.ArgumentList.Add("--apply-update");
             start.ArgumentList.Add(Process.GetCurrentProcess().Id.ToString());
             start.ArgumentList.Add(currentExe);
-            start.ArgumentList.Add(downloaded);
-            start.ArgumentList.Add(hex);
+            start.ArgumentList.Add(stage);
+            start.ArgumentList.Add(newExeHash);
             using var updater = Process.Start(start)
                 ?? throw new InvalidOperationException("Could not launch update helper.");
-            log("Validated application update; updater launched (PID hidden).");
-            // The caller MUST close the current EXE immediately.
+            log("Verified portable update; updater will replace EXE and backend, preserving platform-tools and settings.");
+            updaterLaunched = true;
             return true;
         }
-        catch
+        finally
         {
-            try { File.Delete(downloaded); } catch { }
-            throw;
+            try { File.Delete(downloaded); } catch (IOException) { }
+            if (!updaterLaunched && stage is not null)
+            {
+                try { Directory.Delete(stage, recursive: true); } catch (IOException) { }
+            }
         }
     }
 
