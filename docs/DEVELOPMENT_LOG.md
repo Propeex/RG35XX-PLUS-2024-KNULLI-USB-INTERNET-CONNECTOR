@@ -43,3 +43,5 @@
 - Migrated helper Go sources and tests, plus KNULLI shell scripts to `native/`; added native reproducible ARM64 build and shell-syntax CI.
 - Verified upstream xjasonlyu/tun2socks v2.7.0 release asset SHA-256 equals the historical pinned value `3931476c9cfa8fa236d23aeaf36767df0eb27cc11ecaab699faba57744450f49`. Upstream reports MIT license.
 - Updated `docs/BACKEND_TESTING.md` for a reproducible hardware test. **No functional EXE Beta Release** until this path works on real Windows/handheld hardware and fully audited native packaging is ready.
+
+- Startup now defers both automatic EXE update and Google Platform-Tools replacement when the app-owned SSH PID marker exists, avoiding in-use adb.exe replacement and reconnect loops. This is intentional even if the PID marker might be stale; user must use STOP before updating.
