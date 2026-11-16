@@ -119,7 +119,7 @@ internal static class PlatformToolsService
             movedNew = true;
             log("Installed Platform-Tools revision " + unpackedRevision + ".");
         }
-        catch (IOException ex) when (installed && ex is not InvalidDataException)
+        catch (IOException ex) when (installed)
         {
             // Existing tools may be locked by an owned/shared ADB daemon.
             // Never prevent GUI startup merely because an optional update is
