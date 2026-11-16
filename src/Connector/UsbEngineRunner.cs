@@ -165,14 +165,31 @@ internal sealed class UsbEngineRunner
                 psi.ArgumentList.Add(arg);
             using var process = Process.Start(psi);
             if (process is null) return false;
-            Task<string> readOut = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            Task<string> readErr = process.StandardError.ReadToEndAsync(timeout.Token);
-            await process.WaitForExitAsync(timeout.Token);
-            string stdout = await readOut;
-            await readErr;
-            return NativeProbeSucceeded(process.ExitCode, stdout);
+            try
+            {
+                Task<string> readOut = process.StandardOutput.ReadToEndAsync(timeout.Token);
+                Task<string> readErr = process.StandardError.ReadToEndAsync(timeout.Token);
+                await process.WaitForExitAsync(timeout.Token);
+                string stdout = await readOut;
+                await readErr;
+                return NativeProbeSucceeded(process.ExitCode, stdout);
+            }
+            catch (OperationCanceledException)
+            {
+                // Dispose() does not terminate a running adb.exe. Reap the
+                // timed-out probe so repeated 15-second checks cannot pile up.
+                try
+                {
+                    if (!process.HasExited) process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None);
+                }
+                catch (InvalidOperationException) { /* already exited */ }
+                catch (System.ComponentModel.Win32Exception) { /* process already gone */ }
+                return false;
+            }
         }
-        catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException)
+        catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException
+            or System.ComponentModel.Win32Exception)
         {
             return false;
         }
