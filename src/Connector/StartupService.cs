@@ -39,7 +39,8 @@ internal static class StartupHttp
 
 internal sealed class StartupService
 {
-    internal async Task PrepareAsync(
+    /// <returns>True if a verified app update helper was started. Caller must exit immediately.</returns>
+    internal async Task<bool> PrepareAsync(
         IProgress<StartupStep> progress,
         Action<string> log,
         CancellationToken cancellation)
@@ -47,13 +48,18 @@ internal sealed class StartupService
         progress.Report(new StartupStep("Checking application releases..."));
         try
         {
-            string summary = await GithubReleaseChecker.CheckAsync(cancellation);
-            log(summary);
+            if (await SelfUpdateService.CheckAndLaunchAsync(progress, log, cancellation))
+            {
+                // Do not initialize Platform-Tools in an EXE being replaced.
+                return true;
+            }
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+                or JsonException or InvalidOperationException or IOException
+                or UnauthorizedAccessException or CryptographicException)
         {
-            // GitHub outage must not break an already installed, usable app.
-            log("GitHub release check unavailable: " + ex.Message);
+            // A failed GitHub update must not take away the existing application.
+            log("GitHub release check/update skipped: " + ex.Message);
         }
 
         progress.Report(new StartupStep("Checking Android Platform-Tools..."));
@@ -63,35 +69,6 @@ internal sealed class StartupService
             throw new FileNotFoundException("Platform-Tools installation finished without adb.exe.");
         progress.Report(new StartupStep("Startup checks completed."));
         log("Startup prerequisites completed.");
-    }
-}
-
-internal static class GithubReleaseChecker
-{
-    private const string ReleasesApi =
-        "https://api.github.com/repos/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/releases?per_page=30";
-
-    /// <summary>
-    /// Discovery only. Secure replacement/restart implementation is tracked by issue #3.
-    /// Never claim a release has been installed while that installer does not exist.
-    /// </summary>
-    internal static async Task<string> CheckAsync(CancellationToken cancellation)
-    {
-        using var response = await StartupHttp.Client.GetAsync(ReleasesApi, cancellation);
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellation);
-        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellation);
-        if (json.RootElement.ValueKind != JsonValueKind.Array)
-            throw new JsonException("Expected GitHub Releases array.");
-
-        // /releases/latest excludes prereleases; enumerate all for the beta channel.
-        foreach (var release in json.RootElement.EnumerateArray())
-        {
-            if (release.TryGetProperty("draft", out var draft) && draft.GetBoolean()) continue;
-            if (release.TryGetProperty("tag_name", out var tag))
-                return "GitHub release discovered: " + (tag.GetString() ?? "unknown") +
-                    ". Automatic replacement pending implementation (#3).";
-        }
-        return "No published GitHub Releases yet. Continuing with development build.";
+        return false;
     }
 }
