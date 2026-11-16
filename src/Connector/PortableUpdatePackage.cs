@@ -13,6 +13,7 @@ internal static class PortableUpdatePackage
 {
     internal const string ReleaseAsset = "RG35XX-USB-Internet-Connector.zip";
     internal const string Executable = "RG35XXUsbInternetConnector.exe";
+    internal const string Launcher = "RG35XX-Start.exe";
 
     internal static string StageAndValidate(string zipFile)
     {
@@ -37,6 +38,7 @@ internal static class PortableUpdatePackage
                         || Path.IsPathRooted(relative))
                         throw new InvalidDataException("Unsafe or unexpected ZIP entry: " + relative);
                     if (!relative.Equals(Executable, StringComparison.Ordinal)
+                        && !relative.Equals(Launcher, StringComparison.Ordinal)
                         && !relative.Equals("README_KR.md", StringComparison.Ordinal)
                         && !relative.StartsWith("backend/", StringComparison.Ordinal))
                         throw new InvalidDataException("Release ZIP contains an unsupported file: " + relative);
@@ -58,8 +60,11 @@ internal static class PortableUpdatePackage
             }
 
             string nextExe = Path.Combine(staging, Executable);
-            if (!File.Exists(nextExe) || new FileInfo(nextExe).Length < 100_000)
+            if (!File.Exists(nextExe) || new FileInfo(nextExe).Length < 20_000)
                 throw new InvalidDataException("Release ZIP is missing the Windows EXE.");
+            string launcher = Path.Combine(staging, Launcher);
+            if (!File.Exists(launcher) || new FileInfo(launcher).Length < 4_000)
+                throw new InvalidDataException("Release ZIP is missing the lightweight launcher.");
             if (!UsbBackendBundle.VerifyFolder(Path.Combine(staging, "backend"), out string reason))
                 throw new InvalidDataException("Release backend hash verification failed: " + reason);
 
@@ -96,6 +101,8 @@ internal static class PortableUpdatePackage
         string actual = ExeHash(fullStage);
         if (!actual.Equals(expectedExeHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Staged EXE hash mismatch.");
+        if (!File.Exists(Path.Combine(fullStage, Launcher)))
+            throw new InvalidDataException("Staged launcher is missing.");
         if (!UsbBackendBundle.VerifyFolder(Path.Combine(fullStage, "backend"), out string reason))
             throw new InvalidDataException("Staged backend integrity failed: " + reason);
     }
