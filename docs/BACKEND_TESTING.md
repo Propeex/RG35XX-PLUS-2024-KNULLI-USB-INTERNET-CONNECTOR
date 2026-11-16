@@ -124,3 +124,18 @@ Changes on PR #10:
 6. With Internet active, close the app and choose Yes to disconnect; the app should STOP and exit. Check that the **connector-owned** ADB server on port **5056** and its owned SSH tunnel no longer run. Never assume another application's shared port 5037 must exit.
 7. Reopen `KNULLI USB Link.exe`: no new language or .NET runtime download; GUI main activity log starts blank and polling adds only current-session diagnostics.
 8. Hardware tests have not been run in CI: no claim of proven uninstall, new-user first-install, auto-update rollback, SSH password compatibility across all KNULLI builds, or Windows sleep behavior. Report first failing stage with the corresponding developer log; omit device serials and private keys.
+
+
+## Final START 6/6 hang and new KNULLI USB Link branding
+
+The hardware owner confirmed device Internet works but the GUI stayed on **6/6**, the Connect button never changed to Disconnect. This is distinct from initial Internet health detection. The Windows GUI previously redirected PowerShell stdout/stderr and read both to **EOF after the PowerShell process terminated**. The persistent `ssh.exe` reverse-tunnel child may inherit one of these write handles, keeping the pipe open even after its PowerShell parent exited. The UI therefore kept `_busy=true`, even though KNULLI native networking succeeded. The confirmed code defect is the unbounded pipe-EOF dependency; inheritance behavior on the user's specific device is the leading hypothesis, not yet recorded with a process trace.
+
+The runner now streams diagnostics only through the existing private log file; it does **not redirect PowerShell output pipes**. It waits for the PowerShell process itself, not for EOF from a child that is intentionally supposed to stay alive. A maximum five-minute START/STOP timeout is still enforced. The GUI must set Internet green, hide the stage bar, and switch its button to Disconnect **after the backend process exits**. Stage 6/6 is an operation-stage indicator, not the completion state. The STOP side must continue to preserve the verified-owned-tunnel cleanup.
+
+Branding: users now launch **`KNULLI USB Link.exe`** (small .NET Framework bootloader). Both the launcher and internal `RG35XXUsbInternetConnector.exe` embed a custom USB-C → globe icon, generated from original source art under `assets/knulli-usb-link-icon.png.base64` with `scripts/Build-AppIcon.ps1` at build time. The internal EXE name remains stable for SSH_ASKPASS and updater backward compatibility. The first-run language and .NET 8 setup remain unchanged.
+
+Regression acceptance:
+1. Start from a clean latest Actions ZIP. Double-click `KNULLI USB Link.exe`; verify the branded icon on Explorer/Windows taskbar and first-run language selector.
+2. Press Connect. Confirm stage 6/6 does **not** remain visible after the backend reports `USB Internet action completed successfully.`; the Internet label goes green and the button switches to Disconnect without relaunching.
+3. Wait 1 minute, then click Disconnect and verify the SSH process, KNULLI rgusb0 route, owned port 5056 and button state reset; do not kill any independently owned port 5037 ADB daemon.
+4. Repeat START/STOP once. If 6/6 persists, provide the new `*-start.log` showing timestamps between `Stage compatibility`, `Connected:`, and `USB Internet action completed successfully.`. No SSH private key.
