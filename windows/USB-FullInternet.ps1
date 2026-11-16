@@ -206,212 +206,22 @@ function InstallKey() {
         if ($p.ExitCode -ne 0) { Fail 'SSH key generation failed.' }
     }
     $pub = (Get-Content -LiteralPath "$key.pub" -Raw).Trim()
-    if ($pub -notmatch '^ssh-ed25519 [A-Za-z0-9+/=]+ rg35xx-usb-gui
-    Push (Join-Path $script:root 'device/setup-ssh-key.sh') "$script:base/setup-ssh-key.sh"
-    [void](MustAdb @('shell',"chmod 755 $script:base/setup-ssh-key.sh") 'chmod key installer')
-    $registration = RunAdb @('shell',"sh $script:base/setup-ssh-key.sh '$pub'")
-    if ($registration.Code -ne 0 -or $registration.Text -notmatch '(?m)^RGUSB_SSH_KEY_READY\s*$') {
-        # ADB exit status by itself is not proof that the remote installer ran.
-        Fail ("Device SSH public-key registration could not be verified: " + $registration.Text)
-    }
-    Log 'Device SSH public key registration verified.'
-    return $key
-}
-function StartSSH() {
-    if (CheckSocks) {
-        if (-not (ProcessForOwnedSSH)) {
-            Fail 'A SOCKS proxy is already active but not owned by this connector. Refusing to take it over.'
-        }
-        Log 'Reusing connector-owned SSH tunnel.'
-        return
-    }
-    StopOwnedSSH
-    $key = InstallKey
-    $ssh = CommandPath 'ssh.exe'
-    $known = Join-Path $script:state 'known_hosts'
-    $sshlog = Join-Path $script:state 'ssh-client.log'
-    # Reset previous attempts so the private log describes this connection only.
-    [IO.File]::WriteAllText($sshlog,'',(New-Object Text.UTF8Encoding($false)))
-    $info = New-Object Diagnostics.ProcessStartInfo
-    $info.FileName = $ssh
-    $info.Arguments = ('-v -N -T -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{0}" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -E "{1}" -i "{2}" -R 1080 -p 2222 root@127.0.0.1' -f $known,$sshlog,$key)
-    $info.UseShellExecute = $false
-    $info.CreateNoWindow = $true
-    $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
-    $p = [Diagnostics.Process]::Start($info)
-    [IO.File]::WriteAllText((Join-Path $script:state 'ssh.pid'),[string]$p.Id)
-    $script:sshStartedHere = $true
-    # A fixed 2-second sleep before each 8-second curl could make tunnel
-    # setup appear frozen. Probe immediately with a short timeout, bounded
-    # by one absolute deadline regardless of individual command duration.
-    $deadline = [DateTime]::UtcNow.AddSeconds(60)
-    $lastProgress = [DateTime]::UtcNow
-    while ([DateTime]::UtcNow -lt $deadline) {
-        if ($p.HasExited) { break }
-        if (CheckSocks) {
-            [IO.File]::WriteAllText((Join-Path $script:state 'adb-port.txt'),$script:port)
-            Log 'Background SSH reverse SOCKS tunnel verified.'
-            return
-        }
-        if ([DateTime]::UtcNow -ge $lastProgress.AddSeconds(12)) {
-            Log 'Waiting for SSH reverse SOCKS tunnel to become ready.'
-            $lastProgress = [DateTime]::UtcNow
-        }
-        Start-Sleep -Milliseconds 700
-    }
-    StopOwnedSSH
-    # Auth diagnostics are stored privately. Classify the common case in the
-    # GUI without exposing the public key, serial or private SSH material.
-    if (Test-Path -LiteralPath $sshlog) {
-        $sshReason = Get-Content -LiteralPath $sshlog -Raw -ErrorAction SilentlyContinue
-        if ($sshReason -match 'Permission denied \(publickey(?:,password)?\)') {
-            Fail 'SSH root public-key authentication rejected by KNULLI. Key registration was verified; check server key permissions and private SSH log.'
-        }
-        if ($sshReason -match 'remote port forwarding failed') {
-            Fail 'KNULLI SSH server rejected reverse SOCKS forwarding on port 1080.'
-        }
-    }
-    Fail ("SSH tunnel failed. Review the private diagnostic file: " + $sshlog)
-}
-function Deploy() {
-    Log 'Deploying audited device scripts and embedded ARM64 executables.'
-    [void](MustAdb @('shell',"mkdir -p $script:base") 'create device folder')
-    $files = @(
-        @((Join-Path $script:root 'bin/daemon-launch-arm64'),"$script:base/daemon-launch"),
-        @((Join-Path $script:root 'bin/dns-bridge-arm64'),"$script:base/dns-bridge"),
-        @((Join-Path $script:root 'bin/tunctl-arm64'),"$script:base/tunctl"),
-        @((Join-Path $script:root 'bin/tun2socks-arm64'),"$script:base/tun2socks"),
-        @((Join-Path $script:root 'device/start-fullnet.sh'),"$script:base/start-fullnet.sh"),
-        @((Join-Path $script:root 'device/stop-fullnet.sh'),"$script:base/stop-fullnet.sh"),
-        @((Join-Path $script:root 'device/watch-fullnet.sh'),"$script:base/watch-fullnet.sh"),
-        @((Join-Path $script:root 'device/check-fullnet.sh'),"$script:base/check-fullnet.sh"),
-        @((Join-Path $script:root 'device/compat-fullnet.sh'),"$script:base/compat-fullnet.sh"),
-        @((Join-Path $script:root 'device/setup-ssh-key.sh'),"$script:base/setup-ssh-key.sh")
-    )
-    foreach ($pair in $files) { Push $pair[0] $pair[1] }
-    [void](MustAdb @('shell',"chmod 755 $script:base/tun2socks $script:base/dns-bridge $script:base/tunctl $script:base/daemon-launch $script:base/*.sh") 'chmod device files')
-}
-function ApplyCompatibility() {
-    $r = RunAdb @('shell',"sh $script:base/compat-fullnet.sh apply")
-    if ($r.Text) { Log $r.Text }
-    if ($r.Code -ne 0) { Fail 'KNULLI IP or PortMaster compatibility patch failed.' }
-}
-function StartInternet() {
-    $active = Exists "$script:base/active"
-    $tun = TunExists
-    if ($active -and (CheckNative)) {
-        Log 'Existing USB native HTTPS connection is healthy.'
-        Push (Join-Path $script:root 'device/compat-fullnet.sh') "$script:base/compat-fullnet.sh"
-        [void](MustAdb @('shell',"chmod 755 $script:base/compat-fullnet.sh") 'chmod compatibility')
-        ApplyCompatibility
-        $script:connectionHealthy = $true
-        return
-    }
-    if ($active -or $tun) {
-        if ($tun -and -not (Exists "$script:base/tun.created")) {
-            Fail 'Unowned rgusb0 detected; refusing to remove another application network interface.'
-        }
-        Log 'Stale USB state found. Attempting owned cleanup before reconnection.'
-        PrepareStop
-        StopDevice
-        StopOwnedSSH
-    }
-    Log 'Stage USB forwarding: configuring ADB TCP port 2222.'
-    [void](MustAdb @('forward','tcp:2222','tcp:22') 'USB SSH port forwarding')
-    $utc = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    [void](MustAdb @('shell',"date -u -s @$utc") 'set device clock')
-    Log 'Stage SSH/SOCKS: establishing authenticated reverse tunnel.'
-    StartSSH
-    Log 'Stage device payload: uploading verified ARM64 binaries and scripts.'
-    Deploy
-    # KNULLI may have /etc/resolv.conf -> ../tmp/resolv.conf with a missing target.
-    $resolver = RunAdb @('shell',
-        'if [ "$(readlink /etc/resolv.conf 2>/dev/null)" = "../tmp/resolv.conf" ] && [ ! -e /tmp/resolv.conf ]; then touch /tmp/resolv.conf; fi')
-    if ($resolver.Code -ne 0) { Fail 'Cannot prepare KNULLI volatile resolver target.' }
-    Log 'Stage TUN/DNS: starting device TUN interface and DNS-over-HTTPS.'
-    Log 'Starting device TUN and DNS-over-HTTPS.'
-    $result = RunAdb @('shell',"sh $script:base/start-fullnet.sh")
-    if ($result.Text) { Log $result.Text }
-    if ($result.Code -ne 0) { Fail 'KNULLI TUN/DNS startup failed.' }
-    Log 'Stage native HTTPS: validating DNS, route and direct HTTPS without proxy settings.'
-    $ok = $false
-    for ($attempt=0; $attempt -lt 3; $attempt++) {
-        if (CheckNative) { $ok = $true; break }
-        Start-Sleep -Seconds 3
-    }
-    if (-not $ok) {
-        try { StopDevice } catch { Log ("Recovery warning: " + $_.Exception.Message) }
-        Fail 'Native DNS and HTTPS verification failed after TUN startup.'
-    }
-    Log 'Stage compatibility: applying KNULLI IP recognition and PortMaster startup guards.'
-    ApplyCompatibility
-    $script:connectionHealthy = $true
-    Log 'Connected: native HTTPS, IP display and PortMaster compatibility applied.'
-}
-function ShowStatus() {
-    if (-not (Exists "$script:base/check-fullnet.sh")) {
-        Log 'Device has no installed USB Internet status script.'
-        return
-    }
-    $r = RunAdb @('shell',"sh $script:base/check-fullnet.sh")
-    if ($r.Text) { Log $r.Text }
-    if ($r.Code -ne 0) { Fail 'Device status check failed.' }
-    if ((Exists "$script:base/active") -and -not (CheckNative)) {
-        Fail 'Device has a stale active marker but native HTTPS is unavailable.'
-    }
-}
-try {
-    Log ("USB Internet action started: " + $Action)
-    Discover
-    switch ($Action) {
-        'start' { StartInternet }
-        'status' { ShowStatus }
-        'stop' {
-            PrepareStop
-            StopDevice
-            StopOwnedSSH
-            StopOwnedAdb
-            Log 'STOP completed and verified.'
-        }
-    }
-    Log 'USB Internet action completed successfully.'
-    exit 0
-}
-catch {
-    Log ("USB Internet action failed: " + $_.Exception.Message)
-    if ($Action -eq 'stop') {
-        # On USB unplug, Windows resources can be cleaned but remote network
-        # state is UNKNOWN; never report successful remote disconnect.
-        StopOwnedSSH
-        StopOwnedAdb
-        Log 'Windows SSH/ADB cleanup attempted; remote cleanup remains unverified.'
-        exit 2
-    }
-    if ($script:sshStartedHere -and -not $script:connectionHealthy) {
-        $remoteActive = $false
-        try {
-            if ($script:serial) { $remoteActive = Exists "$script:base/active" }
-        } catch { }
-        if (-not $remoteActive) { StopOwnedSSH }
-    }
-    exit 1
-}
-) {
+    if ($pub -notmatch '^ssh-ed25519 [A-Za-z0-9+/=]+ rg35xx-usb-gui$') {
         Fail 'SSH public key has an unexpected format.'
     }
-    # A stale or mismatched private/public pair would silently fail remote
-    # authentication even though authorized_keys contains the supplied .pub.
+    # Mismatched private/public keys otherwise fail silently at the SSH server.
+    # Compare the public part derived from the private key, preserving both.
     $sshgen = CommandPath 'ssh-keygen.exe'
     $derived = & $sshgen -y -f $key 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Fail 'Connector private SSH key could not be read. Existing credentials were not modified.'
+        Fail 'Connector private SSH key cannot be read; no credentials were modified.'
     }
     $derivedParts = (($derived | Out-String).Trim() -split '\s+')
     $publicParts = ($pub -split '\s+')
     if ($derivedParts.Count -lt 2 -or
         $derivedParts[0] -ne $publicParts[0] -or
         $derivedParts[1] -ne $publicParts[1]) {
-        Fail 'Connector SSH public and private keys do not match. Existing credentials were not overwritten.'
+        Fail 'Connector SSH public/private keys differ; no credentials were overwritten.'
     }
     [void](MustAdb @('shell',"mkdir -p $script:base") 'create device directory')
     Push (Join-Path $script:root 'device/setup-ssh-key.sh') "$script:base/setup-ssh-key.sh"
