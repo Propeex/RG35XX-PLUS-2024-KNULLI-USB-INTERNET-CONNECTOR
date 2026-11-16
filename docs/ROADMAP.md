@@ -151,6 +151,7 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 ## Stability before convenience features — accepted scope
 
 - [x] Prevent two GUI instances from competing for the owned ADB/SSH state.
+- [x] Reuse the dedicated ADB daemon while a ready device is polled instead of restarting it every 2.5 seconds; request shutdown on GUI exit if no owned SSH tunnel.
 - [x] Bound the SSH reverse SOCKS readiness phase to a 60-second deadline with short probes; report stage messages while it is active.
 - [x] Cancel an in-flight USB action on sustained device loss (two consecutive failed ADB probes) or Windows suspend; **do not auto-reconnect**.
 - [x] Record each manual Internet action's elapsed time in the English activity log.
