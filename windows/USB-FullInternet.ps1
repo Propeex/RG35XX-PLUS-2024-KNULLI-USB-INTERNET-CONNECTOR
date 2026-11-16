@@ -189,6 +189,9 @@ function StartSSH() {
     $info.UseShellExecute = $false
     # Use the OpenSSH askpass protocol without opening a CMD or password window.
     # 'force' is required by some Windows OpenSSH builds even without a TTY.
+    # The user-approved KNULLI factory default; passed only in child environment.
+    # Never place it in an SSH command line or diagnostic output.
+    $info.EnvironmentVariables['RG35XX_SSH_ASKPASS_VALUE'] = 'linux'
     $info.EnvironmentVariables['SSH_ASKPASS'] = $askpass
     $info.EnvironmentVariables['SSH_ASKPASS_REQUIRE'] = 'force'
     $info.EnvironmentVariables['DISPLAY'] = 'localhost:0'
