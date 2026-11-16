@@ -27,7 +27,7 @@ internal sealed class BootstrapForm : Form
 
     internal BootstrapForm()
     {
-        Text = _chooseLanguage ? "Language" : "RG35XX+ (2024) Connector — Startup";
+        Text = _chooseLanguage ? string.Empty : "RG35XX+ (2024) Connector — Startup";
         ClientSize = new Size(580, _chooseLanguage ? 145 : _firstLaunch ? 322 : 145);
         _languagePromptPending = _chooseLanguage;
         MinimumSize = MaximumSize = Size;
