@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,8 @@ namespace RG35XXUsbInternetConnector;
 internal sealed class MainForm : Form
 {
     private const int WmDeviceChange = 0x0219;
+    private const int WmPowerBroadcast = 0x0218;
+    private const int PbtApmSuspend = 0x0004;
 
     private readonly Label _title = new();
     private readonly Label _deviceCaption = new();
@@ -39,6 +42,8 @@ internal sealed class MainForm : Form
     private int _polling;
     private int _healthPolling;
     private int _deviceGeneration;
+    private int _missingDeviceChecksDuringAction;
+    private CancellationTokenSource? _actionCancellation;
     private string _lastAdbDiagnostic = "";
     private DateTimeOffset _lastHealthCheck = DateTimeOffset.MinValue;
 
@@ -171,17 +176,36 @@ internal sealed class MainForm : Form
         base.WndProc(ref m);
         // Windows USB arrival/removal hints cause a prompt re-probe. Periodic
         // ADB checks remain authoritative (some drivers emit no device event).
+        if (m.Msg == WmPowerBroadcast && m.WParam == (IntPtr)PbtApmSuspend)
+        {
+            CancelActiveOperation("Windows is entering sleep; cancelling current USB action.");
+            _adbReady = false;
+            _internetHealthy = false;
+            _deviceGeneration++;
+            ApplyLanguage();
+        }
         if (m.Msg == WmDeviceChange && IsHandleCreated && !_closed)
             _ = PollDeviceAsync();
     }
 
     private bool ShouldDisconnect => _internetHealthy || _mayHaveActiveSession;
 
+    private void CancelActiveOperation(string reason)
+    {
+        if (!_busy || _actionCancellation is null || _actionCancellation.IsCancellationRequested)
+            return;
+        AppendLog(reason);
+        _actionCancellation.Cancel();
+    }
+
     private async Task RunActionAsync(EngineAction action, bool closeAfterStop)
     {
         if (_busy || !_engineInstalled || (!_adbReady && action != EngineAction.Stop))
             return;
         _busy = true;
+        _missingDeviceChecksDuringAction = 0;
+        _actionCancellation = new CancellationTokenSource();
+        var actionStopwatch = Stopwatch.StartNew();
         // A connection in transition is not a verified healthy connection.
         _internetHealthy = false;
         // Device presence must stay current even during a long SSH/TUN action.
@@ -191,7 +215,7 @@ internal sealed class MainForm : Form
         ApplyLanguage();
         try
         {
-            var outcome = await _engine.RunAsync(action, AppendLog, CancellationToken.None);
+            var outcome = await _engine.RunAsync(action, AppendLog, _actionCancellation.Token);
             _mayHaveActiveSession = File.Exists(SshPidFile);
             _lastHealthCheck = DateTimeOffset.MinValue;
             if (action == EngineAction.Stop)
@@ -206,7 +230,7 @@ internal sealed class MainForm : Form
             {
                 // An owned SSH session and independent HTTPS proof are both required.
                 _internetHealthy = _mayHaveActiveSession &&
-                    await UsbEngineRunner.NativeInternetHealthyAsync(CancellationToken.None);
+                    await UsbEngineRunner.NativeInternetHealthyAsync(_actionCancellation.Token);
                 if (_internetHealthy)
                     AppendLog("Independent native HTTPS verification passed.");
                 else
@@ -224,6 +248,12 @@ internal sealed class MainForm : Form
                 Close();
             }
         }
+        catch (OperationCanceledException)
+        {
+            _internetHealthy = false;
+            _mayHaveActiveSession = File.Exists(SshPidFile);
+            AppendLog("USB action cancelled; connect again from the beginning when the device is ready.");
+        }
         catch (Exception ex)
         {
             _internetHealthy = false;
@@ -236,6 +266,11 @@ internal sealed class MainForm : Form
         }
         finally
         {
+            actionStopwatch.Stop();
+            AppendLog("USB action elapsed: " +
+                actionStopwatch.Elapsed.TotalSeconds.ToString("0.0") + " seconds.");
+            _actionCancellation?.Dispose();
+            _actionCancellation = null;
             _busy = false;
             ApplyLanguage();
             if (!_closed && !_closingAfterStop)
@@ -261,6 +296,15 @@ internal sealed class MainForm : Form
             {
                 _lastAdbDiagnostic = detail;
                 AppendLog(detail);
+            }
+            if (_busy)
+            {
+                _missingDeviceChecksDuringAction = ready
+                    ? 0 : _missingDeviceChecksDuringAction + 1;
+                // A single missed ADB response during SSH startup can be
+                // transient; cancel only after two consecutive failed probes.
+                if (_missingDeviceChecksDuringAction >= 2)
+                    CancelActiveOperation("USB device unavailable twice during operation.");
             }
             if (_adbReady != ready)
             {
