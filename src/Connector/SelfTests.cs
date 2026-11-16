@@ -34,6 +34,12 @@ internal static class SelfTests
                 "askpass must not answer host key confirmation prompts");
             Assert(!SshPasswordBridge.IsPasswordPrompt(Array.Empty<string>()),
                 "askpass must reject missing prompt");
+            Assert(UsbEngineRunner.NativeBackendVerified(
+                    "16:00:01 RGUSB_NATIVE_HTTPS_OK: direct HTTPS verified on KNULLI."),
+                "stage marker proves backend native HTTPS");
+            Assert(!UsbEngineRunner.NativeBackendVerified(
+                    "16:00:02 USB Internet action completed successfully."),
+                "generic exit success alone is not native HTTPS proof");
             Assert(UsbEngineRunner.NativeProbeSucceeded(0, "RGUSB_NATIVE_OK\r\n"),
                 "explicit remote HTTPS success required");
             Assert(!UsbEngineRunner.NativeProbeSucceeded(0, "RGUSB_NATIVE_FAIL\r\n"),
