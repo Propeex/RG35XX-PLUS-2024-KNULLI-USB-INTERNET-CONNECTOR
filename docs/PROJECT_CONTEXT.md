@@ -76,3 +76,12 @@ Give the assistant this GitHub repo URL, ask it to **read README.md, docs/PROJEC
 - Main EXE UI has no update progress bar. First-run-only startup BootstrapForm displays progress; later launches silently check/apply updates before MainForm.
 - Google SDK Platform-Tools bootstrap/update and GitHub application updater have code in `main`; both need manual first-run/update tests.
 - The internet Connect button remains intentionally **disabled** until issue #4 brings over the verified KNULLI backend. No GitHub Release exists yet.
+
+## 2026-11-16 — Issue #4 transitional engine integration (PR #7)
+
+- Original local v1.4 and v1.6 ZIPs were reopened and inspected, rather than relying on prior summaries. Verified actual legacy SHA-256 values: v1.4 `72f7b2b6f21932a27f742672fe389736b272fde84af6a1cfc1143135d87639cc`, v1.6 `3f69756af1825eb6738dca25e0c9222dc43d17991fbc051670fce7f5778d015d`.
+- The new EXE can import only the pinned v1.6 ZIP from beside the EXE into a private app-data folder, and patches the script's ADB executable path to use officially managed Google Platform-Tools. No binary is committed.
+- GUI single toggle starts/stops the legacy engine with no visible CMD/PowerShell window and checks native HTTPS. UI logs remain English; full legacy diagnostic logs stored separately.
+- Windows ADB server is assigned port 5056 for the connector. GUI conservatively recognizes a preexisting owned SSH PID marker to avoid killing the tunnel on GUI restart. It can request Windows-side STOP even after USB unplug, but remote cleanup remains unverified offline.
+- Original Go sources for tunctl, dns-bridge and daemon-launch and the KNULLI device shell scripts are now under native/. GitHub Actions tests and cross-compiles Go ARM64 tools. External tun2socks v2.7.0 pinned ZIP SHA-256 matches upstream GitHub asset.
+- **Not complete:** migration of the Windows PowerShell source, full self-contained binary packaging, first-run/reconnect physical QA and release. See docs/BACKEND_TESTING.md.
