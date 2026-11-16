@@ -26,13 +26,16 @@ internal static class UsbBackendBundle
     internal static bool Installed => VerifyDistribution(out _);
 
     internal static bool VerifyDistribution(out string error)
+        => VerifyFolder(Folder, out error);
+
+    internal static bool VerifyFolder(string directory, out string error)
     {
         try
         {
-            if (!Directory.Exists(Folder))
+            if (!Directory.Exists(directory))
                 throw new DirectoryNotFoundException("Portable backend folder missing beside EXE.");
 
-            string manifest = Path.Combine(Folder, "SHA256SUMS");
+            string manifest = Path.Combine(directory, "SHA256SUMS");
             if (!File.Exists(manifest))
                 throw new FileNotFoundException("Backend SHA256SUMS manifest is missing.");
 
@@ -57,7 +60,7 @@ internal static class UsbBackendBundle
 
             foreach (var pair in hashes)
             {
-                string path = Path.Combine(Folder, pair.Key.Replace('/', Path.DirectorySeparatorChar));
+                string path = Path.Combine(directory, pair.Key.Replace('/', Path.DirectorySeparatorChar));
                 if (!File.Exists(path))
                     throw new FileNotFoundException("Backend file missing: " + pair.Key);
                 using var file = File.OpenRead(path);
@@ -67,9 +70,9 @@ internal static class UsbBackendBundle
             }
 
             // Prevent adding unverified executable or shell files into our folder.
-            foreach (string file in Directory.EnumerateFiles(Folder, "*", SearchOption.AllDirectories))
+            foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
             {
-                string relative = Path.GetRelativePath(Folder, file)
+                string relative = Path.GetRelativePath(directory, file)
                     .Replace(Path.DirectorySeparatorChar, '/');
                 if (relative == "SHA256SUMS") continue;
                 if (!hashes.ContainsKey(relative))
