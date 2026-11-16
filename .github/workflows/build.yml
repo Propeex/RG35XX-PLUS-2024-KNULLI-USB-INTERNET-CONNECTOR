@@ -93,8 +93,18 @@ jobs:
         run: dotnet restore src/Connector/Connector.csproj
       - name: Build
         run: dotnet build src/Connector/Connector.csproj --no-restore --configuration Release
-      - name: Publish self-contained Windows EXE
-        run: dotnet publish src/Connector/Connector.csproj --no-restore --configuration Release --runtime win-x64 -p:PublishSingleFile=true -p:SelfContained=true --output artifacts/windows
+      - name: Publish framework-dependent Windows EXE
+        run: dotnet publish src/Connector/Connector.csproj --no-restore --configuration Release --runtime win-x64 -p:PublishSingleFile=true -p:SelfContained=false --output artifacts/windows
+      - name: Compile small .NET Framework 4.x first-run launcher
+        shell: pwsh
+        run: |
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (!(Test-Path $csc)) { throw 'Windows .NET Framework compiler not available.' }
+          & $csc /nologo /target:winexe /platform:x64 /out:artifacts/windows/RG35XX-Start.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.dll src/Launcher/Launcher.cs
+          if ($LASTEXITCODE -ne 0) { throw 'Lightweight launcher compilation failed.' }
+          $launcher = (Resolve-Path 'artifacts/windows/RG35XX-Start.exe').Path
+          $p = Start-Process -FilePath $launcher -ArgumentList '--self-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Lightweight first-run launcher self-test failed.' }
       - name: Assemble portable program folder
         shell: pwsh
         run: |
@@ -131,11 +141,14 @@ jobs:
             }
             Write-Host "Headless SSH_ASKPASS helper responds through stdout successfully."
           } finally { $p.Dispose() }
-      - name: Package portable ZIP distribution
+      - name: Package small portable ZIP distribution
         shell: pwsh
         run: |
           New-Item -Force -ItemType Directory dist | Out-Null
           Compress-Archive -Path artifacts/windows/* -DestinationPath dist/RG35XX-USB-Internet-Connector-dev.zip -CompressionLevel Optimal
+          $size = (Get-Item dist/RG35XX-USB-Internet-Connector-dev.zip).Length
+          Write-Host "Framework-dependent portable ZIP size: $([Math]::Round($size / 1MB, 2)) MiB."
+          if ($size -gt 30MB) { throw 'Portable ZIP regressed above 30 MiB.' }
       - name: Validate distribution ZIP with the actual Windows EXE
         shell: pwsh
         run: |
