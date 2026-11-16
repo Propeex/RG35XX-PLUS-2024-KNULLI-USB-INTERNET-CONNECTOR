@@ -160,7 +160,7 @@ internal sealed class MainForm : Form
     {
         string T(string key) => UiStrings.Get(_selectedLanguage, key);
         _title.Text = T("Title");
-        _languageLabel.Text = T("Language");
+        _languageLabel.Text = "Language";
         _status.Text = T("StatusPrefix") + ": " + T(_state.ToString());
         _status.ForeColor = _state switch
         {
@@ -169,7 +169,7 @@ internal sealed class MainForm : Form
             _ => Color.FromArgb(75, 86, 100)
         };
         _connectToggle.Text = T(_state == ConnectionState.Connected ? "Disconnect" : "Connect");
-        _logLabel.Text = T("Log");
+        _logLabel.Text = "Activity Log";
     }
 
     private void AppendLog(string message)
