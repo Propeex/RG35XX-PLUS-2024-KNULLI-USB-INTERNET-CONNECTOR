@@ -240,9 +240,9 @@ internal sealed class MainForm : Form
         _failedInternetChecks = 0;
         _actionProgress.Visible = true;
         _actionProgressLabel.Visible = true;
-        _actionProgress.Style = action == EngineAction.Start
-            ? ProgressBarStyle.Blocks : ProgressBarStyle.Marquee;
+        _actionProgress.Style = ProgressBarStyle.Blocks;
         _actionProgress.Value = 0;
+        _actionProgress.Maximum = action == EngineAction.Start ? 6 : 4;
         _actionProgressLabel.Text = action == EngineAction.Start
             ? UiStrings.Get(_selectedLanguage, "ProgressStarting")
             : UiStrings.Get(_selectedLanguage, "ProgressStopping");
@@ -345,9 +345,20 @@ internal sealed class MainForm : Form
 
         if (action == EngineAction.Stop)
         {
-            // Stopping remote helpers and restoring DNS are not predictable
-            // durations. Marquee is truthful; 100% is shown only on success.
-            _actionProgressLabel.Text = UiStrings.Get(_selectedLanguage, "ProgressStopping");
+            int stopStage = message switch
+            {
+                var s when s.Contains("Stage STOP preparation:", StringComparison.Ordinal) => 1,
+                var s when s.Contains("Stage STOP device:", StringComparison.Ordinal) => 2,
+                var s when s.Contains("Stage STOP SSH:", StringComparison.Ordinal) => 3,
+                var s when s.Contains("Stage STOP ADB:", StringComparison.Ordinal) => 4,
+                _ => 0
+            };
+            if (stopStage > 0)
+            {
+                _actionProgress.Value = Math.Max(stopStage, _actionProgress.Value);
+                _actionProgressLabel.Text = string.Format(
+                    UiStrings.Get(_selectedLanguage, "ProgressStopStage"), stopStage, 4);
+            }
             return;
         }
 
@@ -515,7 +526,8 @@ internal sealed class MainForm : Form
         if (_busy && _actionProgress.Style != ProgressBarStyle.Marquee &&
             _actionProgress.Value > 0)
             _actionProgressLabel.Text = string.Format(
-                T("ProgressStage"), _actionProgress.Value, 6);
+                T(_actionProgress.Maximum == 4 ? "ProgressStopStage" : "ProgressStage"),
+                _actionProgress.Value, _actionProgress.Maximum);
         _connectToggle.Enabled = !_busy && _engineInstalled &&
             (_adbReady || _mayHaveActiveSession && ShouldDisconnect);
         _logLabel.Text = T("Log");
