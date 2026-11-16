@@ -142,8 +142,21 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [x] Source: no recycled startup messages in the main activity view, localized heading, current-language selector.
 - [x] Source: ADB USB arrival/removal hints + frequent probe and multi-device rejection.
 - [x] Source: explicit remote shell state markers, independent STOP checks and native HTTPS proof; live stage output during long actions.
-- [ ] CI compile, PowerShell AST parse, ARM64 backend tests, EXE smoke and portable ZIP integrity **must pass** on this branch.
+- [x] Initial PR CI compile, PowerShell AST parse, ARM64 backend tests, EXE smoke and portable ZIP integrity passed; re-run required after the newest stability changes.
 - [ ] Hardware: validate improved device plug/unplug reporting and both UI colors.
 - [ ] Hardware: check actual `active`/TUN result, START, healthy HTTPS, successful STOP, reconnect and PortMaster.
 - [ ] Regression: first-run three locales, persistent language, restart resets GUI activity log but retains private technical diagnostics.
 - [ ] No Beta Release until these hardware and real portable update tests pass.
+
+## Stability before convenience features — accepted scope
+
+- [x] Prevent two GUI instances from competing for the owned ADB/SSH state.
+- [x] Bound the SSH reverse SOCKS readiness phase to a 60-second deadline with short probes; report stage messages while it is active.
+- [x] Cancel an in-flight USB action on sustained device loss (two consecutive failed ADB probes) or Windows suspend; **do not auto-reconnect**.
+- [x] Record each manual Internet action's elapsed time in the English activity log.
+- [x] Log troubleshooting checkpoints for ADB forwarding, SSH/SOCKS, payload upload, TUN/DNS, native HTTPS and compatibility; no user-facing log export.
+- [ ] Hardware performance measurements before enabling any automatic connect behavior; automatic connect is explicitly deferred.
+- [ ] Hardware verify cancellation and explicit restart after USB unplug or Windows sleep; do not attempt elaborate auto recovery.
+- [ ] Future: optional minimize-to-tray behavior **after** stable manual START/STOP.
+- [ ] Future: simple settings **after** tray behavior (not before).
+- [ ] Preserve the current atomic staged + checksum-verified updater; update failure notifications and invasive updater rewrites are outside the current scope. Test two real release upgrades before promoting to beta.
