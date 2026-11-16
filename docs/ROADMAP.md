@@ -122,3 +122,14 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] Re-test user's physically attached RG35XX+ 2024 to verify that ADB now reports `Ready` and connection button enables.
 - [ ] Actually test updating from one portable GitHub beta release to the next including rollback, without deleting `platform-tools`.
 - [ ] Verify USB native HTTPS, KNULLI IP display, PortMaster and STOP on physical device before beta Release.
+
+
+## PR #9 verified source milestone
+
+- [x] PR #9 merged into main (`5e2a7724a86f`).
+- [x] GitHub Actions run `43800558352`: full ARM64, PowerShell, EXE, ADB parsing, folder ZIP and updater ZIP integrity checks passed.
+- [x] Verified Actions artifacts `gui-development-build` and `windows-portable-zip`.
+- [ ] **User hardware retest**: attached RG35XX+ (2024) must change from Disconnected to Ready before pressing Connect.
+- [ ] **Manual Windows UI retest**: actual language selector, localized Google SDK consent and unclipped Language label.
+- [ ] **Release update test**: portable EXE/backend upgrade across two prereleases while keeping adjacent Platform-Tools and user settings.
+- [ ] **No beta Release yet**: wait for successful physical connection and reliable STOP.

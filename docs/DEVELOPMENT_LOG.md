@@ -79,3 +79,12 @@
 - Found code-level ADB false-negative: literal tab `\\tdevice` test was too restrictive. Updated to whitespace token parsing, added diagnostic logging and fallback from 5056 to existing shared 5037; STOP must never intentionally kill other apps' port 5037 server.
 - Added a ZIP staging/verifier and rollback updater with offline CI validation. An early CI run failed its newly added portable ZIP verification test; we instrumented errors to diagnose and fix it rather than releasing.
 - **Pending:** final passing CI of the whole portable artifact + user physical test of actual attached device and connect/disconnect. No hardware-ready GitHub Beta Release has been made.
+
+
+## 2026-11-16 — PR #9 merged after Windows ZIP and ADB parser CI
+
+- Final source commit `6e3b58b9d788bee6130b83a19b67a6400188f7cf` passed both jobs in Actions run `43800558352`.
+- Earlier CI caught a ZIP validator limit below the actual ~162MB unpacked self-contained EXE (raised to bounded 250MB individual / 400MB total) and a C# exception filter compile mistake (corrected). The final entire workflow passed.
+- PR #9 squash-merged to main: `5e2a7724a86fa7f790df8d5eb7d53803b7d8916b`.
+- Verified development artifacts existed: `gui-development-build` and `windows-portable-zip`. No GitHub Release was created.
+- Remaining actual-device acceptance: attached USB must display Ready, Connect/Disconnect must work, SSH process lifecycle, KNULLI IP alias, native HTTPS, ScreenScraper, theme download, PortMaster and stale-state recovery. Also test portable ZIP GitHub Release updater restart/rollback and first-run SDK installation with user-selected language.

@@ -127,3 +127,12 @@ Probable ADB false negative found in code: `AdbProbe.HasReadyDeviceAsync` requir
 Portable split: `./backend/` checksum-verified scripts/binaries, `./platform-tools/` official Android SDK downloaded beside EXE, `./data/settings.json` chosen language, per-user sensitive SSH keys/logs under `%LOCALAPPDATA%`.
 
 GitHub issue #4 remains open for device connection, native HTTPS, PortMaster, STOP and reconnect; issues #2 and #3 for official SDK/version update and complete portable-ZIP app updates. PR #9 implements the user's feedback, pending CI/hardware test.
+
+
+## PR #9 merged checkpoint (2026-11-16)
+
+- The screenshot-driven UX fix was merged into `main` at `5e2a7724a86fa7f790df8d5eb7d53803b7d8916b`. The linked PR is #9.
+- All jobs passed in [GitHub Actions run 43800558352](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/actions/runs/43800558352): Linux ARM64 helper build, PowerShell syntax, .NET WinForms EXE, offline ADB parser, portable ZIP assembly and ZIP extraction/integrity verifier.
+- `gui-development-build` artifact is a ready-to-unzip folder containing the EXE plus `backend/`. The `windows-portable-zip` artifact holds an inner release-format ZIP for testing the complete updater format. Both are **GitHub Actions artifacts**, **not GitHub Releases**.
+- Distribution now uses a folder ZIP, official Platform-Tools adjacent to EXE, data/settings adjacent, private SSH key/logs in per-user LocalAppData. First-run KO/EN/JA selection happens before the localized SDK license consent dialog. Main screen language label no longer has the original 74px width. ADB parsing accepts spaces and tabs and probes 5056 / 5037.
+- **Do not call device false-negative resolved** until the user tests the new EXE and confirms that physical USB attachment is recognized and Connect works. No hardware-ready beta release has been published.
