@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Text;
 
 namespace RG35XXUsbInternetConnector;
 
@@ -50,8 +49,12 @@ internal sealed class UsbEngineRunner
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
                 WorkingDirectory = UsbBackendBundle.Folder,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
+                // The long-running ssh.exe tunnel can inherit PowerShell's
+                // redirected output handles. ReadToEndAsync would then wait
+                // forever after PowerShell has exited, leaving START stuck 6/6.
+                // All activity is already streamed from the private log file.
+                RedirectStandardOutput = false,
+                RedirectStandardError = false
             };
             foreach (string arg in new[]
             {
@@ -75,8 +78,6 @@ internal sealed class UsbEngineRunner
 
             try
             {
-                Task<string> outputTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
-                Task<string> errorTask = process.StandardError.ReadToEndAsync(timeout.Token);
                 // Stream bounded English log lines as they are written. Waiting
                 // until process exit made a slow SSH/TUN start look frozen.
                 Task completed = process.WaitForExitAsync(timeout.Token);
@@ -88,8 +89,6 @@ internal sealed class UsbEngineRunner
                 }
                 await completed;
                 nextLine = StreamNewLogLines(logfile, nextLine, log);
-                string stdout = await outputTask;
-                string stderr = await errorTask;
                 if (process.ExitCode == 0)
                 {
                     log("USB backend operation succeeded: " + token);
@@ -99,8 +98,6 @@ internal sealed class UsbEngineRunner
                     log("USB backend operation failed: " + token +
                         " (exit code " + process.ExitCode + ").");
                     log("Detailed technical log saved to " + logfile);
-                    if (!string.IsNullOrWhiteSpace(stderr))
-                        log("PowerShell exited with diagnostic stderr (see technical log).");
                 }
                 bool nativeVerified = action == EngineAction.Start &&
                     File.Exists(logfile) &&
