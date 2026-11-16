@@ -59,12 +59,12 @@ internal sealed class MainForm : Form
         foreach (string line in startupLogs) AppendLog(line);
         if (!_engineInstalled)
         {
-            AppendLog("Embedded USB backend missing or invalid; connection is disabled.");
-            AppendLog("This development build has no verified embedded backend. Consult the GitHub build log.");
+            AppendLog("Portable backend is missing or invalid; connection is disabled.");
+            AppendLog("The portable backend folder failed validation. Extract the full ZIP again.");
         }
         else
         {
-            AppendLog("Embedded source-tracked USB backend available (hardware re-test required).");
+            AppendLog("Portable USB backend verified (hardware re-test required).");
         }
 
         _statusTimer.Interval = 9000;
