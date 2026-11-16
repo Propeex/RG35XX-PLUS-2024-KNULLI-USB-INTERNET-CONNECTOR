@@ -119,6 +119,21 @@ internal static class PlatformToolsService
             movedNew = true;
             log("Installed Platform-Tools revision " + unpackedRevision + ".");
         }
+        catch (IOException ex) when (installed && ex is not InvalidDataException)
+        {
+            // Existing tools may be locked by an owned/shared ADB daemon.
+            // Never prevent GUI startup merely because an optional update is
+            // unavailable. Restore the old files if staging had begun.
+            if (movedOld && !movedNew && Directory.Exists(backup))
+            {
+                if (Directory.Exists(AppPaths.ToolsDirectory))
+                    Directory.Delete(AppPaths.ToolsDirectory, recursive: true);
+                Directory.Move(backup, AppPaths.ToolsDirectory);
+            }
+            if (!File.Exists(AppPaths.AdbPath)) throw;
+            log("Platform-Tools update deferred; existing installation retained (" +
+                ex.GetType().Name + ").");
+        }
         catch
         {
             // Restore last working tools if a staged swap failed.
