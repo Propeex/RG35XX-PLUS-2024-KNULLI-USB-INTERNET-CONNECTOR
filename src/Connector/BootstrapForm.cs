@@ -27,7 +27,11 @@ internal sealed class BootstrapForm : Form
 
     internal BootstrapForm()
     {
-        Text = _chooseLanguage ? string.Empty : "RG35XX+ (2024) Connector — Startup";
+        Text = _chooseLanguage ? string.Empty : "KNULLI USB Link — Startup";
+        // Use the branded PE icon for this window and the Windows taskbar.
+        try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+        catch (Exception ex) when (ex is IOException or ArgumentException
+                or System.ComponentModel.Win32Exception) { }
         ClientSize = new Size(580, _chooseLanguage ? 145 : _firstLaunch ? 322 : 145);
         _languagePromptPending = _chooseLanguage;
         MinimumSize = MaximumSize = Size;
