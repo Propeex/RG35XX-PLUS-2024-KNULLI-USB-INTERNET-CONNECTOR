@@ -61,3 +61,11 @@ To be determined after auditing the legacy backend and bundled dependencies. Do 
 2. Subsequent launches: automatically check/apply updates **before** opening the main UI; a minimal status-only startup window is allowed, but show **no progress bars**.
 3. **Never include any update progress controls in the main interface.** The main interface contains the title, language selector, real-time connection status, one central connect/disconnect button and an English log only.
 4. As of the merged GUI foundation (PR #6), self-update and official SDK installation code **build and pass offline smoke tests in Windows CI, but require fresh-Windows and real-device validation**, and the USB network engine is still pending. Do not mistake a development build artifact for a release.
+
+## Experimental USB backend bridge (development only)
+
+Issue #4 is being implemented on PR #7. The new WinForms EXE now contains an **experimental one-button Connect / Disconnect bridge** to the historical PowerShell/ADB/SSH/TUN engine, including native HTTPS health verification and owner-aware STOP. This does **not** mean the new EXE has been tested on hardware.
+
+For now, the developer EXE imports the precise old v1.6 ZIP **from next to the EXE** after checking its pinned SHA-256. We intentionally do not publish that unreviewed binary bundle. See [backend test instructions](docs/BACKEND_TESTING.md).
+
+The underlying Go ARM64 helpers and KNULLI shell sources are being migrated into [native/](native/), with reproducible Go tests and ARM64 CI builds. The remaining PowerShell/source audit, automatic packaging, and physical-device tests must pass before any Beta GitHub Release.
