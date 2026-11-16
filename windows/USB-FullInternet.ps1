@@ -287,6 +287,16 @@ function StartSSH() {
         if ($p.HasExited) { break }
         if (CheckSocks) {
             [IO.File]::WriteAllText((Join-Path $script:state 'adb-port.txt'),$script:port)
+            # Report the authentication mechanism, not the credential. This
+            # makes it easy to confirm whether password fallback was used.
+            if (Test-Path -LiteralPath $sshlog) {
+                $authLog = Get-Content -LiteralPath $sshlog -Raw -ErrorAction SilentlyContinue
+                if ($authLog -match '(?:using "password"|Authentication succeeded \(password\))') {
+                    Log 'SSH authentication succeeded via automatic KNULLI default password.'
+                } elseif ($authLog -match '(?:using "publickey"|Authentication succeeded \(publickey\))') {
+                    Log 'SSH authentication succeeded via connector-owned public key.'
+                }
+            }
             Log 'Background SSH reverse SOCKS tunnel verified.'
             return
         }
