@@ -7,7 +7,7 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [x] Record real-device findings and previous failures
 - [x] Specify app architecture, UI contract, update strategy, security and release policy
 - [ ] Audit legacy helper licenses and migrate reproducible backend source
-- [ ] Add a Windows desktop source project and CI build
+- [x] Add a Windows desktop source project and CI build (PR #6, CI verified; not hardware tested)
 
 ## Phase 1 — Working Windows GUI skeleton (development branch; CI pending)
 - [ ] Launch from EXE; no persistent console
@@ -64,7 +64,8 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [x] Source: Google Platform-Tools metadata/version check, staged download and replacement.
 - [x] Source: GitHub Release discovery, digest verification and separate EXE updater-copy handoff.
 - [x] Source: ADB device readiness polling with isolated temporary server port.
-- [ ] **Windows CI compile must pass; manual Windows startup tests required.**
+- [x] Windows CI compile, single EXE publish and offline smoke tests passed (run 43791370453).
+- [ ] **Manual Windows startup/update and actual RG35XX device tests required.**
 - [ ] Verify real SDK repository XML, official ZIP checksums/structure on fresh Windows machine.
 - [ ] Verify GitHub prerelease-to-prerelease update, restart and failure rollback.
 - [ ] Integrate and test known-working v1.4 USB networking engine.
