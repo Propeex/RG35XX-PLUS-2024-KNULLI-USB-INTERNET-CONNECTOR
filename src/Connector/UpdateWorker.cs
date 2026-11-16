@@ -61,7 +61,7 @@ internal static class UpdateWorker
             {
                 File.Move(downloaded, target, overwrite: true);
                 replaced = true;
-                Process.Start(new ProcessStartInfo(target)
+                using var relaunched = Process.Start(new ProcessStartInfo(target)
                 {
                     UseShellExecute = true,
                     WorkingDirectory = Path.GetDirectoryName(target)!
