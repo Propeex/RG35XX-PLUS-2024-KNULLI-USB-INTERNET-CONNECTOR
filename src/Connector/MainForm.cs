@@ -182,6 +182,8 @@ internal sealed class MainForm : Form
         if (_busy || !_engineInstalled || (!_adbReady && action != EngineAction.Stop))
             return;
         _busy = true;
+        // A connection in transition is not a verified healthy connection.
+        _internetHealthy = false;
         // Device presence must stay current even during a long SSH/TUN action.
         // Polls run against the selected ADB server only while an action is busy.
         AppendLog(action == EngineAction.Start
