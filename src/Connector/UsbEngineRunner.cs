@@ -6,7 +6,8 @@ namespace RG35XXUsbInternetConnector;
 
 internal enum EngineAction { Start, Stop, Status }
 
-internal sealed record EngineResult(bool Success, string DiagnosticLog, int ExitCode);
+internal sealed record EngineResult(bool Success, string DiagnosticLog, int ExitCode,
+    bool NativeVerified);
 
 /// <summary>
 /// Runs the source-tracked USB PowerShell backend with NO visible console and with
@@ -101,7 +102,11 @@ internal sealed class UsbEngineRunner
                     if (!string.IsNullOrWhiteSpace(stderr))
                         log("PowerShell exited with diagnostic stderr (see technical log).");
                 }
-                return new EngineResult(process.ExitCode == 0, logfile, process.ExitCode);
+                bool nativeVerified = action == EngineAction.Start &&
+                    File.Exists(logfile) &&
+                    NativeBackendVerified(File.ReadAllText(logfile));
+                return new EngineResult(process.ExitCode == 0, logfile, process.ExitCode,
+                    nativeVerified);
             }
             catch (OperationCanceledException)
             {
@@ -134,6 +139,11 @@ internal sealed class UsbEngineRunner
         catch (IOException) { /* Retry on the next tick if PowerShell owns the file. */ }
         return nextLine;
     }
+
+    // This marker is written only *after* the PowerShell backend has tested
+    // device-side native HTTPS, before optional KNULLI compatibility patches.
+    internal static bool NativeBackendVerified(string actionLog)
+        => actionLog.Contains("RGUSB_NATIVE_HTTPS_OK:", StringComparison.Ordinal);
 
     /// <summary>
     /// Native Internet must be proven by an explicit shell output marker:
