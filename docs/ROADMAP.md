@@ -70,3 +70,17 @@ Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical
 - [ ] Verify GitHub prerelease-to-prerelease update, restart and failure rollback.
 - [ ] Integrate and test known-working v1.4 USB networking engine.
 - [ ] Release only after tested milestone with appropriate beta designation.
+
+## Issue #4 source migration snapshot (PR #7, 2026-11-16)
+
+- [x] Pin and inspect the exact legacy v1.4 and v1.6 ZIPs and document their provenance.
+- [x] Add conditional, SHA-256 checked **local** legacy backend import for device testing (not public redistribution).
+- [x] Hook the one-button GUI to hidden PowerShell Start/Stop, native HTTPS verification and conservative status transitions.
+- [x] Separate owned ADB port 5056 from unrelated applications; preserve active tunnel during UI polling/reopen.
+- [x] Migrate Go native helper sources, tests, and KNULLI device shell scripts to `native/`.
+- [x] GitHub Actions Linux ARM64 helper cross-build/test and shell syntax validation.
+- [ ] Migrate/rewrite entire Windows PowerShell orchestration into the repository and remove legacy ZIP requirement.
+- [ ] Integrate reproducibly built helpers into an automatically prepared signed/verified backend installer.
+- [ ] Test the new EXE start/stop, SSH key setup, native DNS, ScreenScraper, theme and PortMaster on the physical device.
+- [ ] Test unplug/reconnect, stale active flag, Windows process cleanup and recovery on the real device.
+- [ ] Merge an acceptable milestone; create a **beta** Release only when actual functionality and update installer are tested.
