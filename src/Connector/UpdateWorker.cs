@@ -51,7 +51,12 @@ internal static class UpdateWorker
             Directory.CreateDirectory(backupFolder);
             string savedExe = Path.Combine(backupFolder, PortableUpdatePackage.Executable);
             string savedBackend = Path.Combine(backupFolder, "backend");
+            string targetLauncher = Path.Combine(root, PortableUpdatePackage.Launcher);
+            string savedLauncher = Path.Combine(backupFolder, PortableUpdatePackage.Launcher);
+            bool hadLauncher = File.Exists(targetLauncher);
             File.Copy(target, savedExe);
+            if (hadLauncher) File.Copy(targetLauncher, savedLauncher);
+            bool launcherReplaceAttempted = false;
             bool oldBackendMoved = false;
             bool newBackendMoved = false;
             bool exeReplaced = false;
@@ -64,6 +69,9 @@ internal static class UpdateWorker
                 File.Copy(Path.Combine(stage, PortableUpdatePackage.Executable), target,
                     overwrite: true);
                 exeReplaced = true;
+                launcherReplaceAttempted = true;
+                File.Copy(Path.Combine(stage, PortableUpdatePackage.Launcher),
+                    targetLauncher, overwrite: true);
 
                 string readme = Path.Combine(stage, "README_KR.md");
                 if (File.Exists(readme))
@@ -72,11 +80,14 @@ internal static class UpdateWorker
                     catch (IOException) { /* optional documentation; never break upgrade */ }
                 }
 
-                using var updated = Process.Start(new ProcessStartInfo(target)
+                // The launcher is the user-facing entry point and can
+                // install the .NET 8 Desktop Runtime if this update changes
+                // the deployment from self-contained to framework-dependent.
+                using var updated = Process.Start(new ProcessStartInfo(targetLauncher)
                 {
                     UseShellExecute = true,
                     WorkingDirectory = root
-                }) ?? throw new InvalidOperationException("Updated EXE could not restart.");
+                }) ?? throw new InvalidOperationException("Updated launcher could not restart.");
 
                 Directory.CreateDirectory(AppPaths.BaseDirectory);
                 File.WriteAllText(logFile,
@@ -88,6 +99,13 @@ internal static class UpdateWorker
                 // or launch the new program.
                 if (exeReplaced || File.Exists(savedExe))
                     File.Copy(savedExe, target, overwrite: true);
+                if (launcherReplaceAttempted)
+                {
+                    if (hadLauncher && File.Exists(savedLauncher))
+                        File.Copy(savedLauncher, targetLauncher, overwrite: true);
+                    else if (!hadLauncher && File.Exists(targetLauncher))
+                        File.Delete(targetLauncher);
+                }
                 if (newBackendMoved && Directory.Exists(oldBackend))
                     Directory.Delete(oldBackend, recursive: true);
                 if (oldBackendMoved && Directory.Exists(savedBackend))
