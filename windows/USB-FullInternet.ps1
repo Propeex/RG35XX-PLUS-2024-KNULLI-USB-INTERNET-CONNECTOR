@@ -97,7 +97,7 @@ function CheckNative() {
     return ($r.Code -eq 0 -and $r.Text -match '(?m)^HTTP/(?:1\.[01]|2|3)\s+[23][0-9][0-9]')
 }
 function CheckSocks() {
-    $r = RunAdb @('shell','curl --max-time 8 -sSI --socks5-hostname 127.0.0.1:1080 https://example.com')
+    $r = RunAdb @('shell','curl --connect-timeout 2 --max-time 4 -sSI --socks5-hostname 127.0.0.1:1080 https://example.com')
     return ($r.Code -eq 0 -and $r.Text -match '(?m)^HTTP/(?:1\.[01]|2|3)\s+[23][0-9][0-9]')
 }
 function Push([string]$Local,[string]$Remote) {
@@ -237,14 +237,23 @@ function StartSSH() {
     $p = [Diagnostics.Process]::Start($info)
     [IO.File]::WriteAllText((Join-Path $script:state 'ssh.pid'),[string]$p.Id)
     $script:sshStartedHere = $true
-    for ($i=0; $i -lt 18; $i++) {
-        Start-Sleep -Seconds 2
+    # A fixed 2-second sleep before each 8-second curl could make tunnel
+    # setup appear frozen. Probe immediately with a short timeout, bounded
+    # by one absolute deadline regardless of individual command duration.
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    $lastProgress = [DateTime]::UtcNow
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if ($p.HasExited) { break }
         if (CheckSocks) {
             [IO.File]::WriteAllText((Join-Path $script:state 'adb-port.txt'),$script:port)
             Log 'Background SSH reverse SOCKS tunnel verified.'
             return
         }
-        if ($p.HasExited) { break }
+        if ([DateTime]::UtcNow -ge $lastProgress.AddSeconds(12)) {
+            Log 'Waiting for SSH reverse SOCKS tunnel to become ready.'
+            $lastProgress = [DateTime]::UtcNow
+        }
+        Start-Sleep -Milliseconds 700
     }
     StopOwnedSSH
     Fail ("SSH tunnel failed. Review the private diagnostic file: " + $sshlog)
