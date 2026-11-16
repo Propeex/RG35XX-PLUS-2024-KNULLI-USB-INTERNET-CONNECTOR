@@ -171,7 +171,7 @@ internal sealed class MainForm : Form
         base.WndProc(ref m);
         // Windows USB arrival/removal hints cause a prompt re-probe. Periodic
         // ADB checks remain authoritative (some drivers emit no device event).
-        if (m.Msg == WmDeviceChange && IsHandleCreated && !_closed && !_busy)
+        if (m.Msg == WmDeviceChange && IsHandleCreated && !_closed)
             _ = PollDeviceAsync();
     }
 
@@ -182,7 +182,8 @@ internal sealed class MainForm : Form
         if (_busy || !_engineInstalled || (!_adbReady && action != EngineAction.Stop))
             return;
         _busy = true;
-        _statusTimer.Stop();
+        // Device presence must stay current even during a long SSH/TUN action.
+        // Polls run against the selected ADB server only while an action is busy.
         AppendLog(action == EngineAction.Start
             ? "Connecting USB Internet..." : "Disconnecting USB Internet...");
         ApplyLanguage();
@@ -245,12 +246,13 @@ internal sealed class MainForm : Form
 
     private async Task PollDeviceAsync()
     {
-        if (_busy || _closed || Interlocked.Exchange(ref _polling, 1) != 0) return;
+        if (_closed || Interlocked.Exchange(ref _polling, 1) != 0) return;
         try
         {
-            bool keepServer = _mayHaveActiveSession || _internetHealthy;
-            bool ready = await AdbProbe.HasReadyDeviceAsync(keepServer);
-            if (_closed || IsDisposed || _busy) return;
+            bool keepServer = _mayHaveActiveSession || _internetHealthy || _busy;
+            bool ready = await AdbProbe.HasReadyDeviceAsync(
+                keepServer, allowFallback: !_busy);
+            if (_closed || IsDisposed) return;
 
             string detail = AdbProbe.LastDiagnostic;
             if (detail != _lastAdbDiagnostic)
@@ -276,14 +278,14 @@ internal sealed class MainForm : Form
                 _internetHealthy = false;
             else if (!_mayHaveActiveSession)
                 _internetHealthy = false;
-            else
+            else if (!_busy)
                 _ = CheckInternetHealthAsync();
 
             ApplyLanguage();
         }
         catch (Exception ex)
         {
-            if (_closed || IsDisposed || _busy) return;
+            if (_closed || IsDisposed) return;
             _adbReady = false;
             _internetHealthy = false;
             _deviceGeneration++;
