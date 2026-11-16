@@ -69,3 +69,13 @@
 - GitHub Actions [run 43796188343](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/actions/runs/43796188343) passed all native and Windows build, PowerShell parse, embedded SHA-256 and offline smoke tests.
 - Confirmed downloadable `gui-development-build` artifact; this is **not** a GitHub Release or evidence of actual RG35XX+ hardware operation.
 - [Issue #4](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/issues/4) remains open for physical device validation. No prerelease has been published.
+
+## 2026-11-16 — First real Windows GUI feedback, portable ZIP revision (PR #9)
+
+- User attached a screenshot: Google Platform-Tools 37.0.1 installed and embedded backend verified; GUI still reported **device disconnected** despite USB connection. The `Language` label was visibly cropped; the initial Google SDK prompt appeared in English.
+- Product clarification: user wants **an unpacked ZIP folder with an EXE and editable support files**, *not* a standalone single-EXE distribution. Official Google Platform-Tools should be downloaded to the same folder.
+- Changed distribution from embedded EXE backend to verified sidecar `backend/`, added Korean portable-install instructions, and assembled `windows-portable-zip` plus the regular CI folder artifact. Normal application versions will update EXE+backend as one verified release ZIP; `platform-tools/` and `data/` are preserved.
+- New startup flow: user chooses Korean/English/Japanese before a localized Google SDK license dialog. Main-window language selector label widened and selected language saved in `data/settings.json`. Sensitive SSH keys and diagnostics remain under Windows per-user LocalAppData.
+- Found code-level ADB false-negative: literal tab `\\tdevice` test was too restrictive. Updated to whitespace token parsing, added diagnostic logging and fallback from 5056 to existing shared 5037; STOP must never intentionally kill other apps' port 5037 server.
+- Added a ZIP staging/verifier and rollback updater with offline CI validation. An early CI run failed its newly added portable ZIP verification test; we instrumented errors to diagnose and fix it rather than releasing.
+- **Pending:** final passing CI of the whole portable artifact + user physical test of actual attached device and connect/disconnect. No hardware-ready GitHub Beta Release has been made.

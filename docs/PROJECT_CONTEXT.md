@@ -113,3 +113,17 @@ Give the assistant this GitHub repo URL, ask it to **read README.md, docs/PROJEC
 - Main action is still one Connect/Disconnect toggle; locale affects buttons/status; activity logs English; update progress **only on the first-run bootstrap screen** and never in main UI.
 - Do not label the new EXE functional or stable until the user's physical Windows/RG35XX+ startup, network, STOP and PortMaster tests pass. Issue #4 remains open.
 - Source-of-truth for future ChatGPT sessions: README, ARCHITECTURE, ROADMAP, DEVELOPMENT_LOG, BACKEND_TESTING, open issues and Releases.
+
+## User's first actual GUI screenshot and confirmed requests (2026-11-16)
+
+User tested GitHub Actions EXE on Windows. The English activity log confirmed **Google Platform-Tools 37.0.1 installed** and the **embedded backend verified**, yet status incorrectly said `Disconnected` while USB was physically connected. The screenshot also showed the top-right `Language` label clipped and the first-run Google SDK license prompt originally shown in English.
+
+User corrected the delivery intent: **not a single EXE**. They want a **ZIP to extract into a folder, then run the EXE within it**, with official Google Platform-Tools installed into that same folder. This format makes scripts/settings inspectable and maintainable.
+
+New approved UX: first-run language selection before Google Platform-Tools licensing/downloading; Korean, English and Japanese. Keep only progress in first-run setup, none in main. Fix clipped Language label. Fix false disconnected device detection.
+
+Probable ADB false negative found in code: `AdbProbe.HasReadyDeviceAsync` required literal `"\\tdevice"`, whereas `adb devices -l` may produce spaces. A second potential cause is concurrent dedicated ADB 5056 vs working 5037. The new probe parses whitespace-delimited state, diagnoses offline/unauthorized, and falls back to shared 5037 while preserving it. **The hypothesis is code-based; await user hardware retest before claiming root cause.**
+
+Portable split: `./backend/` checksum-verified scripts/binaries, `./platform-tools/` official Android SDK downloaded beside EXE, `./data/settings.json` chosen language, per-user sensitive SSH keys/logs under `%LOCALAPPDATA%`.
+
+GitHub issue #4 remains open for device connection, native HTTPS, PortMaster, STOP and reconnect; issues #2 and #3 for official SDK/version update and complete portable-ZIP app updates. PR #9 implements the user's feedback, pending CI/hardware test.

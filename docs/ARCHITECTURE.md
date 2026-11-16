@@ -93,3 +93,14 @@ The earlier **experimental legacy-ZIP bridge** section above documents history a
 - `UsbEngineRunner` invokes the extracted PowerShell script with `RG35XX_ADB_EXE` pointing to official Platform-Tools and dedicated ADB server port 5056. It reports English activity summaries and checks native HTTPS before the GUI displays Connected.
 - Only the **first-run separate bootstrap screen** has a progress bar; the main UI never has update progress.
 - CI is a source/package test, **not** a real-device test. The app updater, SDK first-run installer, OpenSSH key installation, tunnel lifecycle, unplug/stop and PortMaster still require Windows/KNULLI QA.
+
+## Portable distribution UX decision and ADB false-negative fix (2026-11-16)
+
+Supersedes the earlier **single-EXE embedded backend** decision. The user wants an extractable **folder ZIP** containing `RG35XXUsbInternetConnector.exe` plus a readable `backend/` tree. CI creates both this folder and a portable ZIP. `UsbBackendBundle` verifies each sidecar backend file against `SHA256SUMS`. Directly editing these files invalidates integrity; normal development is via GitHub source commits and CI rebuilds.
+
+- First run: select KO/EN/JA **before** any Google SDK licensing / Platform-Tools download. License consent is shown in the chosen language. Store only non-secret `data/settings.json` and initialization markers beside the EXE; SSH private keys and logs stay in Windows user-private LocalAppData.
+- Platform-Tools: automatic Google Windows SDK download/check/update into `platform-tools/` **beside the EXE**. SDK staging uses the same folder volume for atomic directory moves. If the user installs into Program Files, explain that a writable extracted folder is necessary.
+- Subsequent launch: keep update checks before the main UI, **no progress bars** after the first run. Main UI remains title / language / live status / one Connect-Disconnect action / English log.
+- Correct ADB parsing: `adb devices -l` may separate columns with whitespace rather than literal tabs; parse state tokens. First probe dedicated port 5056; fall back to shared existing 5037 when necessary. **Never intentionally kill shared 5037 server.** Remember the selected port of an owned SSH tunnel for app restarts. Diagnostics must suppress device serials.
+- Application updates: the GitHub Release asset format is `RG35XX-USB-Internet-Connector.zip`, **not an EXE alone**. Verify GitHub asset SHA-256, stage/verify EXE and backend, then a temporary updater copy swaps the pair after old process exit; preserve `platform-tools/` and `data/`; restore old pair on failed install/relaunch.
+- Automated builds and SHA tests do **not** substitute for Windows+RG35XX hardware QA.
