@@ -43,16 +43,19 @@ internal static class AdbProbe
     private static string ParseState(string listing)
     {
         string result = "none";
+        int ready = 0;
         foreach (string line in listing.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             string[] columns = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (columns.Length < 2) continue;
             string state = columns[1].Trim();
-            if (state == "device") return "device";
+            if (state == "device") ready++;
             if (state == "unauthorized") result = "unauthorized";
             if (state == "offline" && result != "unauthorized") result = "offline";
         }
-        return result;
+        // The PowerShell engine requires exactly one authorized device.
+        if (ready > 1) return "multiple";
+        return ready == 1 ? "device" : result;
     }
 
     private sealed record ProbeResult(bool Ready, string State);
@@ -61,7 +64,7 @@ internal static class AdbProbe
     {
         if (!File.Exists(AppPaths.AdbPath)) return new ProbeResult(false, "ADB not installed");
 
-        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(9));
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var start = new ProcessStartInfo(AppPaths.AdbPath)
         {
             UseShellExecute = false,
@@ -156,7 +159,9 @@ internal static class AdbProbe
         if (alternative == DedicatedPort && !keepServer)
             await StopDedicatedAsync();
 
-        string reason = first.State == "unauthorized" || second.State == "unauthorized"
+        string reason = first.State == "multiple" || second.State == "multiple"
+            ? "Multiple authorized ADB devices detected; disconnect other devices."
+            : first.State == "unauthorized" || second.State == "unauthorized"
             ? "ADB device unauthorized. Check device authorization."
             : first.State == "offline" || second.State == "offline"
                 ? "ADB device offline. Check USB cable and KNULLI ADB mode."
