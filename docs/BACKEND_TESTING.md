@@ -78,3 +78,16 @@ Use a **freshly extracted** `windows-portable-zip` from the latest PR workflow; 
 7. **Updater:** stage two trusted signed/versioned test releases in a controlled test directory to verify successful upgrade, deliberate corrupt-new-EXE rejection, and preservation of `data/` and `platform-tools/`. This cannot be proven by ZIP smoke tests alone. Do not create the public beta until the physical START/STOP passes.
 
 Retain the `%LOCALAPPDATA%\\RG35XXUsbInternetConnector\\backend-logs` START/STOP files for developer analysis if the test fails. Never include SSH private keys, complete device serials, or unredacted sensitive paths in reports.
+
+### SSH key authentication failure recorded on 2026-11-16
+
+The user's 14:44 START advanced through ADB discovery and `tcp:2222` forwarding, but OpenSSH exited at 14:44:27. The private SSH client log recorded `root@127.0.0.1: Permission denied (publickey,password).` The host key was added normally; this **establishes an SSH authentication failure**, not an Internet/TUN/DNS failure. The exact underlying cause (key installation path, permissions, server options, or mismatched key files) has not yet been observed.
+
+The new authentication checks do not overwrite or remove existing SSH credentials:
+- Resolve the root user's SSH home from its passwd entry rather than assume a fixed directory. Keep safe symlink guards.
+- Verify that the remote `authorized_keys` includes the requested public key, then require an explicit `RGUSB_SSH_KEY_READY` marker (the ADB exit code alone is insufficient).
+- Compare the local public and private key pair before using it; abort rather than mutate mismatched credentials.
+- Pass `IdentitiesOnly=yes` and force public-key-only SSH authentication; write bounded verbose SSH connection diagnostics **only to the existing private** `ssh-client.log`, resetting the previous attempt before each START.
+- Surface a sanitized `SSH root public-key authentication rejected` error when the client reports authentication rejection. Avoid logging public key text, private keys, device serials or unsanitized verbose logs in the GUI.
+
+Retest once using a new artifact from the **latest PR CI**. If still failing, review the local `%LOCALAPPDATA%\\RG35XX_USB_FullNet\\ssh-client.log` for `Offering public key` and `Server accepts key` lines and share a redacted copy. Never upload `rg35xx_usb_gui_ed25519` (private key). If `RGUSB_SSH_KEY_READY` validation itself fails, the START log should now reveal that before launching SSH.
