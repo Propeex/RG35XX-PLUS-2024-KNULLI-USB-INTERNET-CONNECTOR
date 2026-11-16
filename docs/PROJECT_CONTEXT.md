@@ -87,3 +87,11 @@ Give the assistant this GitHub repo URL, ask it to **read README.md, docs/PROJEC
 - **Not complete:** migration of the Windows PowerShell source, full self-contained binary packaging, first-run/reconnect physical QA and release. See docs/BACKEND_TESTING.md.
 
 - Added a startup safeguard: when the previous GUI's SSH PID marker remains, skip both EXE and Platform-Tools replacements until the user safely disconnects. This prevents startup failures caused by Windows file locks after choosing to keep internet running in background.
+
+## Latest checkpoint for future chats (2026-11-16)
+
+- PR #7 **merged into main** at commit `669f7da87fff8d3e04732f20b3507627435e0d3d`.
+- Source under `native/` includes the three reproducible Go Linux ARM64 helpers and six KNULLI shell scripts, with native CI tests/builds passing.
+- Main GUI has single Connect/Disconnect backed by hidden PowerShell using a **separately supplied SHA-pinned v1.6 legacy ZIP**. This is a transitional developer bridge, NOT a verified standalone connector.
+- Bootstrap defers app and Platform-Tools updates if the app's prior SSH PID marker remains, to avoid modifying locked adb.exe during an active tunnel.
+- Next priority: migrate Windows orchestrator and package audited helpers directly so no old ZIP is required; then user physical test and prerelease. Keep issue #4 open.
