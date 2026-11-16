@@ -33,3 +33,13 @@
 - PR #6 was squash-merged into main at `dfa97ae63e597d965d8f8d683be5050edfaa8be8`.
 - **No GitHub Release was created:** the actual USB networking backend is not integrated, and the new updater and first-run installer are not verified on a physical Windows/RG35XX system. The one central Connect/Disconnect button is intentionally disabled for this development foundation.
 - Next priority: audited migration of legacy v1.4 backend (issue #4) and fresh-machine GUI/update testing (issues #2/#3); then a tested beta prerelease.
+
+## 2026-11-16 — Real legacy engine bridge and native source migration (PR #7)
+
+- Reopened exact locally available v1.4/v1.6 ZIP source and copied their historical behavior into the GitHub issue #4 implementation plan.
+- Added `LegacyEngineBundle` with pinned v1.6 SHA-256 import from alongside the developer EXE. No legacy native binaries are checked into public GitHub or distributed through release assets.
+- Added `LegacyEngineRunner` to run the original backend invisibly from the WinForms toggle, on an app-specific ADB server port 5056, with English UI logs and separate legacy logs. Report Connected only after independent native HTTPS test.
+- Changed GUI to allow a conservative Windows cleanup request after unplug and avoid killing the owned SSH session when GUI reopens. The existing PortMaster proxy fix, KNULLI IP alias, and network rollback are preserved by the older device scripts pending validation.
+- Migrated helper Go sources and tests, plus KNULLI shell scripts to `native/`; added native reproducible ARM64 build and shell-syntax CI.
+- Verified upstream xjasonlyu/tun2socks v2.7.0 release asset SHA-256 equals the historical pinned value `3931476c9cfa8fa236d23aeaf36767df0eb27cc11ecaab699faba57744450f49`. Upstream reports MIT license.
+- Updated `docs/BACKEND_TESTING.md` for a reproducible hardware test. **No functional EXE Beta Release** until this path works on real Windows/handheld hardware and fully audited native packaging is ready.
