@@ -414,9 +414,13 @@ try {
         'start' { StartInternet }
         'status' { ShowStatus }
         'stop' {
+            Log 'Stage STOP preparation: verifying owned cleanup script.'
             PrepareStop
+            Log 'Stage STOP device: restoring resolver and removing TUN.'
             StopDevice
+            Log 'Stage STOP SSH: stopping connector-owned tunnel.'
             StopOwnedSSH
+            Log 'Stage STOP ADB: shutting down connector-owned server.'
             StopOwnedAdb
             Log 'STOP completed and verified.'
         }
