@@ -255,7 +255,7 @@ internal sealed class BootstrapForm : Form
             : raw.StartsWith("Downloading Platform", StringComparison.Ordinal) ? "DownloadTools"
             : raw.StartsWith("Verifying Platform", StringComparison.Ordinal) ? "VerifyTools"
             : raw.StartsWith("Installing Platform", StringComparison.Ordinal) ? "InstallTools"
-            : raw.StartsWith("Verifying embedded", StringComparison.Ordinal) ? "Backend"
+            : raw.StartsWith("Verifying portable", StringComparison.Ordinal) ? "Backend"
             : raw.StartsWith("Startup checks completed", StringComparison.Ordinal) ? "Done"
             : "Initializing";
         _stage.Text = T(key);
