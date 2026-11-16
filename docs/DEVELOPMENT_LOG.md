@@ -26,3 +26,10 @@
 - Added real ADB USB readiness polling via isolated short-lived ADB server on port 5056, distinguishing device-ready status from internet-connected status. Network toggle is deliberately disabled until engine #4 is migrated.
 - Added self-contained single-file publish setting. Windows CI/real hardware testing still required; no release was created.
 - Sources live in `feature/windows-gui-foundation`, linked to draft PR #6. Main documentation records decisions to allow future chats to resume.
+
+## 2026-11-16 — GUI foundation CI validated and merged
+- GitHub Actions run `43791370453` successfully restored, built, published a self-contained single-file Windows EXE and passed offline smoke tests.
+- Fixed one C# updater launch expression after an early CI compiler failure and adjusted CI to wait correctly for a WinExe process before checking its exit code.
+- PR #6 was squash-merged into main at `dfa97ae63e597d965d8f8d683be5050edfaa8be8`.
+- **No GitHub Release was created:** the actual USB networking backend is not integrated, and the new updater and first-run installer are not verified on a physical Windows/RG35XX system. The one central Connect/Disconnect button is intentionally disabled for this development foundation.
+- Next priority: audited migration of legacy v1.4 backend (issue #4) and fresh-machine GUI/update testing (issues #2/#3); then a tested beta prerelease.
