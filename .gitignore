@@ -1,0 +1,22 @@
+# Local secrets, generated build files and private logs
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.pfx
+*.p12
+*.pem
+*.key
+**/ssh.pid
+**/known_hosts
+**/ssh-client.log
+*.log
+*.tmp
+*.bak
+artifacts/
+dist/
+downloads/
+# Legacy ARM64 compiled helpers require license review before inclusion.
+legacy-private/
