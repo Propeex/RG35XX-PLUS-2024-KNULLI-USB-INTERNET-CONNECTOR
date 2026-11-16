@@ -1,0 +1,44 @@
+name: Native ARM64 helper reproducibility
+
+on:
+  push:
+    branches: [main, "feature/**"]
+    paths: ["native/**", ".github/workflows/native.yml"]
+  pull_request:
+    paths: ["native/**", ".github/workflows/native.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: native/go.mod
+      - name: Check POSIX shell script syntax
+        run: |
+          for script in native/device/*.sh; do
+            sh -n "$script"
+          done
+      - name: Test native Go sources
+        working-directory: native
+        run: go test ./...
+      - name: Build statically linked Linux ARM64 helpers
+        working-directory: native
+        run: |
+          mkdir -p ../artifacts/native-arm64
+          export GOOS=linux GOARCH=arm64 CGO_ENABLED=0
+          go build -trimpath -ldflags="-s -w" -o ../artifacts/native-arm64/daemon-launch-arm64 ./cmd/daemon-launch
+          go build -trimpath -ldflags="-s -w" -o ../artifacts/native-arm64/tunctl-arm64 ./cmd/tunctl
+          go build -trimpath -ldflags="-s -w" -o ../artifacts/native-arm64/dns-bridge-arm64 ./cmd/dns-bridge
+          file ../artifacts/native-arm64/*
+          sha256sum ../artifacts/native-arm64/* > ../artifacts/native-arm64/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-arm64-development-build
+          path: artifacts/native-arm64/
+          retention-days: 7

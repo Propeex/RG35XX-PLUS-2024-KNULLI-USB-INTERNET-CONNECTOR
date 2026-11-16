@@ -68,3 +68,16 @@ Languages: ko-KR, en-US, ja-JP. Language selection updates UI immediately and is
 - A future app update may launch a short-lived helper copy and exit the old process; the new version restarts and repeats the pre-main check.
 - Google SDK license consent is collected before first automatic Platform-Tools download.
 - As of this commit, source is **unverified on Windows**; all updater behavior requires CI + release-to-release tests before a beta release.
+
+## Experimental bridge to original network engine (PR #7)
+
+- `LegacyEngineBundle` only imports one exact SHA-256 pinned **user-supplied** historical v1.6 ZIP; it refuses unexpected content, unsafe paths and an unrecognized ADB path patch. There is no GitHub or other download of this old ZIP.
+- `LegacyEngineRunner` uses a hidden Windows PowerShell process while preserving the historical ADB/SSH/TUN/DNS scripts. All actions have time limits and English high-level logging; original diagnostic files remain separate.
+- The native health check runs an independent ADB curl with `--noproxy '*'` rather than checking only the `active` marker. GUI health probes do not kill the dedicated ADB server when an owned SSH tunnel may be active.
+- **USB unplug is not equivalent to successful remote STOP.** The GUI must not claim KNULLI was restored if the device was unreachable. A Windows-only cleanup attempt is allowed.
+- Source in `native/` is reproducible with Linux ARM64 Go CI; the full public release must eliminate manual legacy ZIP import by migrating/auditing the Windows orchestration and packaging verified helper artifacts.
+- CI compilation is not hardware validation; keep PR #7 under development until physical tests are recorded.
+
+### Active tunnel and startup updates
+
+If `%LOCALAPPDATA%\RG35XX_USB_FullNet\ssh.pid` exists, the bootstrap **defers EXE and Google Platform-Tools updates** while keeping the already installed ADB, to prevent replacing a locked binary or killing the live SSH forward. Disconnect and restart to resume update checks. This marker is conservative and may be stale; the one-button GUI can attempt STOP and leave logs rather than silently clearing unknown remote state.
