@@ -98,7 +98,7 @@ internal static class AdbProbe
         }
     }
 
-    private static async Task StopDedicatedAsync()
+    internal static async Task StopDedicatedAsync()
     {
         if (!File.Exists(AppPaths.AdbPath)) return;
         using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -134,8 +134,8 @@ internal static class AdbProbe
         var first = await QueryAsync(preferred);
         if (first.Ready)
         {
-            if (!keepServer && preferred == DedicatedPort)
-                await StopDedicatedAsync();
+            // Keep the app-owned ADB daemon available for subsequent polls and
+            // for Connect. Killing it every 2.5s caused repeated cold starts.
             Volatile.Write(ref _lastDiagnostic,
                 "ADB device ready (server " + preferred +
                 (preferred == SharedPort ? ", shared)" : ", app-owned)"));
@@ -160,8 +160,6 @@ internal static class AdbProbe
         if (second.Ready)
         {
             Volatile.Write(ref _selectedPort, alternative);
-            if (alternative == DedicatedPort && !keepServer)
-                await StopDedicatedAsync();
             Volatile.Write(ref _lastDiagnostic,
                 "ADB device ready (server " + alternative +
                 (alternative == SharedPort ? ", shared; reused existing ADB)" : ", app-owned)"));
