@@ -87,8 +87,9 @@ internal static class PortableUpdatePackage
         string fullStage = Path.GetFullPath(stage);
         if (!fullStage.StartsWith(fullRoot + Path.DirectorySeparatorChar + ".update-stage-",
                 StringComparison.OrdinalIgnoreCase)
-            || Path.GetDirectoryName(fullStage)?.TrimEnd(Path.DirectorySeparatorChar)
-                != fullRoot
+            || !string.Equals(
+                Path.GetDirectoryName(fullStage)?.TrimEnd(Path.DirectorySeparatorChar),
+                fullRoot, StringComparison.OrdinalIgnoreCase)
             || expectedExeHash.Length != 64 || !expectedExeHash.All(Uri.IsHexDigit))
             throw new InvalidOperationException("Updater staging path or checksum is invalid.");
 
