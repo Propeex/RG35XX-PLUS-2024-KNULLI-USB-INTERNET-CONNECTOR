@@ -76,21 +76,19 @@ internal sealed class UsbEngineRunner
             {
                 Task<string> outputTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
                 Task<string> errorTask = process.StandardError.ReadToEndAsync(timeout.Token);
-                await process.WaitForExitAsync(timeout.Token);
+                // Stream bounded English log lines as they are written. Waiting
+                // until process exit made a slow SSH/TUN start look frozen.
+                Task completed = process.WaitForExitAsync(timeout.Token);
+                int nextLine = 0;
+                while (!completed.IsCompleted)
+                {
+                    nextLine = StreamNewLogLines(logfile, nextLine, log);
+                    await Task.WhenAny(completed, Task.Delay(400, timeout.Token));
+                }
+                await completed;
+                nextLine = StreamNewLogLines(logfile, nextLine, log);
                 string stdout = await outputTask;
                 string stderr = await errorTask;
-                // The source-tracked orchestrator writes English lines into
-                // this private file; reflect them in the GUI after completion.
-                // Avoid forwarding raw adb stdout or private SSH material.
-                if (File.Exists(logfile))
-                {
-                    foreach (string line in File.ReadLines(logfile).TakeLast(160))
-                    {
-                        if (line.Length > 0 && line.Length < 1200
-                            && !line.Contains("PRIVATE KEY", StringComparison.OrdinalIgnoreCase))
-                            log(line);
-                    }
-                }
                 if (process.ExitCode == 0)
                 {
                     log("USB backend operation succeeded: " + token);
@@ -118,16 +116,40 @@ internal sealed class UsbEngineRunner
         }
     }
 
+    private static int StreamNewLogLines(string file, int nextLine, Action<string> log)
+    {
+        try
+        {
+            if (!File.Exists(file)) return nextLine;
+            // The log is small and only one writer exists for this action.
+            // Reopening it allows us to tolerate temporary Windows file locks.
+            foreach (string line in File.ReadLines(file).Skip(nextLine).Take(200))
+            {
+                nextLine++;
+                if (!string.IsNullOrWhiteSpace(line) && line.Length < 1200
+                    && !line.Contains("PRIVATE KEY", StringComparison.OrdinalIgnoreCase))
+                    log(line);
+            }
+        }
+        catch (IOException) { /* Retry on the next tick if PowerShell owns the file. */ }
+        return nextLine;
+    }
+
     /// <summary>
-    /// Native internet test, not a stale active flag. Uses adb port 5056 and
-    /// the existing TUN. Keep the ADB daemon alive while SSH depends on it.
+    /// Native Internet must be proven by an explicit shell output marker:
+    /// older adbd versions can report exit 0 for a failing remote shell test.
+    /// Never trust a stale active flag or adb process exit code alone.
     /// </summary>
+    internal static bool NativeProbeSucceeded(int exitCode, string output)
+        => exitCode == 0 && output.Trim() == "RGUSB_NATIVE_OK";
+
     internal static async Task<bool> NativeInternetHealthyAsync(CancellationToken cancellation)
     {
         if (!File.Exists(AppPaths.AdbPath)) return false;
-        const string command = "test -e /userdata/system/rgusb-fullnet/active && " +
+        const string command = "if test -e /userdata/system/rgusb-fullnet/active && " +
             "ip link show rgusb0 >/dev/null 2>&1 && " +
-            "curl --noproxy '*' -fsSI --max-time 7 https://example.com >/dev/null 2>&1";
+            "curl --noproxy '*' -fsSI --max-time 7 https://example.com >/dev/null 2>&1; " +
+            "then echo RGUSB_NATIVE_OK; else echo RGUSB_NATIVE_FAIL; fi";
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
@@ -146,8 +168,9 @@ internal sealed class UsbEngineRunner
             Task<string> readOut = process.StandardOutput.ReadToEndAsync(timeout.Token);
             Task<string> readErr = process.StandardError.ReadToEndAsync(timeout.Token);
             await process.WaitForExitAsync(timeout.Token);
-            await Task.WhenAll(readOut, readErr);
-            return process.ExitCode == 0;
+            string stdout = await readOut;
+            await readErr;
+            return NativeProbeSucceeded(process.ExitCode, stdout);
         }
         catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException)
         {
