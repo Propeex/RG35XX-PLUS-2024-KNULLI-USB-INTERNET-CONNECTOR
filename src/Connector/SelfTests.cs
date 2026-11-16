@@ -44,6 +44,12 @@ internal static class SelfTests
                 "Korean device disconnected state");
             Assert(UiStrings.Get("ko-KR", "InternetConnected") == "연결됨",
                 "Korean Internet connected state");
+            Assert(UiStrings.Get("en-US", "ProgressStage").Contains("{0}"),
+                "manual progress displays a stage number");
+            Assert(UiStrings.Get("ja-JP", "ProgressStopping") != "ProgressStopping",
+                "manual STOP progress supports Japanese");
+            Assert(PortableUpdatePackage.Launcher == "RG35XX-Start.exe",
+                "portable update includes the small .NET prerequisite launcher");
             Assert(SemVersion.TryParse("v0.1.0-beta.1", out var beta1), "parse beta1");
             Assert(SemVersion.TryParse("0.1.0-beta.2", out var beta2), "parse beta2");
             Assert(SemVersion.TryParse("v0.1.0", out var stable), "parse stable");
