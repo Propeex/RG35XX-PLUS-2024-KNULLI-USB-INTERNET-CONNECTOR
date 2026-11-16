@@ -41,7 +41,7 @@ Languages: ko-KR, en-US, ja-JP. Language selection updates UI immediately and is
 ## USB connectivity pipeline
 
 - Discover ADB device; require **exactly one** ready device and root shell, unless future multiple-device selection is supported.
-- ADB forward `tcp:2222` -> device SSH 22. Use app-specific Windows SSH key, registered on device via ADB, stored in the current Windows user's private application data.
+- ADB forward `tcp:2222` -> device SSH 22. **Current development path:** use root password authentication (`linux`, the user-approved KNULLI default) via a bundled Windows GUI-subsystem `SSH_ASKPASS` helper, avoiding console prompts and OpenSSH's public-key rejection on exFAT SHARE. Pass credentials only via a child environment variable, never in SSH command-line arguments or logs. Future versions should permit user-defined credentials.
 - Run SSH in background with strict PID+command ownership checks; do not kill unrelated SSH processes.
 - Launch TUN/tun2socks and DNS helpers on KNULLI with a daemon/session launcher after verifying old helpers stopped, and use native HTTPS/DNS for success criterion.
 - Apply KNULLI IP label `192.0.2.123/32` to `rgusb0` only if absent.
