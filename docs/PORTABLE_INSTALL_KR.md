@@ -5,7 +5,7 @@
 ## 실행
 
 1. 다운로드한 ZIP 파일을 빈 폴더에 압축 해제합니다.
-2. 폴더 내 **`RG35XX-Start.exe`를 실행합니다.** `RG35XXUsbInternetConnector.exe`는 내부 .NET 8 실행 파일입니다.
+2. 폴더 내 **`KNULLI USB Link.exe`를 실행합니다.** `RG35XXUsbInternetConnector.exe`는 내부 .NET 8 실행 파일입니다.
 3. 최초 실행 시 언어(한국어 / English / 日本語)를 선택합니다.
 4. PC에 **.NET 8 Desktop Runtime**이 없다면 선택한 언어로 안내하고, 동의 시 Microsoft 공식 설치 스크립트로 해당 Windows 사용자 계정에 **한 번만** 설치합니다. 이미 있으면 즉시 다음 단계로 진행합니다.
 5. Google Android SDK Platform-Tools 라이선스를 확인하고 동의하면 자동 설치됩니다.
@@ -17,7 +17,7 @@
 
 ```text
 RG35XX-USB-Internet-Connector/
-├─ RG35XX-Start.exe               # 실행용 작은 런처
+├─ KNULLI USB Link.exe               # 실행용 작은 런처
 ├─ RG35XXUsbInternetConnector.exe  # .NET 8 GUI (런타임 미포함)
 ├─ README_KR.md
 ├─ backend/
