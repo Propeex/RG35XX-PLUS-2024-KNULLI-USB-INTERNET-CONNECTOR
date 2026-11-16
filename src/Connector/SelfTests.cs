@@ -55,9 +55,9 @@ internal static class SelfTests
                 "English translation");
             Assert(UiStrings.Get("ja-JP", "Connected") == "インターネット接続済み",
                 "Japanese translation");
-            Assert(!typeof(MainForm).GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Any(field => field.FieldType == typeof(ProgressBar)),
-                "MainForm must never own an update progress bar");
+            Assert(typeof(MainForm).GetField("_actionProgress",
+                    BindingFlags.Instance | BindingFlags.NonPublic)?.FieldType == typeof(ProgressBar),
+                "MainForm has a manual connect/disconnect progress indicator");
             Assert(typeof(BootstrapForm).GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
                 .Any(field => field.FieldType == typeof(ProgressBar)),
                 "Only startup is allowed a progress bar");
