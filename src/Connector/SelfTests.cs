@@ -62,6 +62,16 @@ internal static class SelfTests
             Assert(typeof(MainForm).GetField("_languageLabel",
                     BindingFlags.Instance | BindingFlags.NonPublic) is null,
                 "Main language selector has no redundant Language label");
+            Assert(typeof(MainForm).GetField("_actionCancellation",
+                    BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                "User actions support cancellation for USB loss and sleep");
+            Assert(typeof(MainForm).GetField("_internetHealthy",
+                    BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                "Independent Internet health is tracked");
+            Assert(typeof(MainForm).GetField("_missingDeviceChecksDuringAction",
+                    BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                "In-flight USB loss uses debounced ADB readiness");
+
             return 0;
         }
         catch
