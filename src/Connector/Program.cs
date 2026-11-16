@@ -13,6 +13,20 @@ internal static class Program
             Environment.ExitCode = SelfTests.Run();
             return;
         }
+        if (args.Length == 2 && args[0] == "--verify-package")
+        {
+            try
+            {
+                string stage = PortableUpdatePackage.StageAndValidate(args[1]);
+                Directory.Delete(stage, recursive: true);
+                Environment.ExitCode = 0;
+            }
+            catch
+            {
+                Environment.ExitCode = 2;
+            }
+            return;
+        }
         if (args.Length > 0 && args[0] == "--apply-update")
         {
             // This is launched from an isolated temporary COPY of the old EXE
