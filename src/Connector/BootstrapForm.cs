@@ -93,7 +93,13 @@ internal sealed class BootstrapForm : Form
 
             var reporter = new Progress<StartupStep>(UpdateStage);
             var svc = new StartupService();
-            await svc.PrepareAsync(reporter, Log, CancellationToken.None);
+            bool updateLaunching = await svc.PrepareAsync(reporter, Log, CancellationToken.None);
+            if (updateLaunching)
+            {
+                // The updater waits for our process to exit before replacing the EXE.
+                Close();
+                return;
+            }
 
             // Mark setup complete only when platform-tools are present/usable.
             Directory.CreateDirectory(AppPaths.BaseDirectory);
