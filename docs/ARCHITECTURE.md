@@ -77,3 +77,7 @@ Languages: ko-KR, en-US, ja-JP. Language selection updates UI immediately and is
 - **USB unplug is not equivalent to successful remote STOP.** The GUI must not claim KNULLI was restored if the device was unreachable. A Windows-only cleanup attempt is allowed.
 - Source in `native/` is reproducible with Linux ARM64 Go CI; the full public release must eliminate manual legacy ZIP import by migrating/auditing the Windows orchestration and packaging verified helper artifacts.
 - CI compilation is not hardware validation; keep PR #7 under development until physical tests are recorded.
+
+### Active tunnel and startup updates
+
+If `%LOCALAPPDATA%\RG35XX_USB_FullNet\ssh.pid` exists, the bootstrap **defers EXE and Google Platform-Tools updates** while keeping the already installed ADB, to prevent replacing a locked binary or killing the live SSH forward. Disconnect and restart to resume update checks. This marker is conservative and may be stale; the one-button GUI can attempt STOP and leave logs rather than silently clearing unknown remote state.
