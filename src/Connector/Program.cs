@@ -40,7 +40,20 @@ internal static class Program
             UpdateWorker.Apply(args);
             return;
         }
+        // Only one instance may own the ADB port, SSH PID file or the update
+        // staging directory. A second launch must never interfere with them.
+        using var singleInstance = new System.Threading.Mutex(
+            initiallyOwned: true,
+            name: @"Local\RG35XX_KNULLI_USB_Internet_Connector",
+            createdNew: out bool createdNew);
         ApplicationConfiguration.Initialize();
+        if (!createdNew)
+        {
+            MessageBox.Show("USB Internet Connector is already running.",
+                "RG35XX USB Internet Connector",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         Application.Run(new BootstrapForm());
     }
 }
