@@ -271,19 +271,23 @@ internal sealed class MainForm : Form
                 else
                     AppendLog("STOP was incomplete; remote cleanup is not confirmed.");
             }
-            else if (outcome.Success)
+            else if (outcome.NativeVerified)
             {
-                // The PowerShell backend already checked direct native HTTPS
-                // before returning success. Do not immediately override that
-                // proof with an independent 7-second probe or missing PID file.
+                // A verified network connection and overall setup completion
+                // are distinct. Optional KNULLI compatibility can fail after
+                // native HTTPS has already succeeded.
                 _internetHealthy = true;
                 _lastHealthCheck = DateTimeOffset.UtcNow;
                 AppendLog("Backend native HTTPS verification passed; Internet connected.");
+                if (!outcome.Success)
+                    AppendLog("Internet is online, but a later compatibility step failed.");
             }
             else
             {
                 _internetHealthy = false;
-                AppendLog("USB Internet start failed; see detailed stage messages above.");
+                AppendLog(outcome.Success
+                    ? "Backend returned success without native HTTPS proof; status remains disconnected."
+                    : "USB Internet start failed; see detailed stage messages above.");
             }
 
             if (outcome.Success)
