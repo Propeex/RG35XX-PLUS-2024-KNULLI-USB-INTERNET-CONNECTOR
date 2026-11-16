@@ -70,6 +70,7 @@ internal sealed class BootstrapForm : Form
                 LanguageSettings.Save(_selectedLanguage);
                 _continue.Enabled = false;
                 _languageCombo.Enabled = false;
+                if (_firstLaunch) _progress.Visible = true;
                 await StartAsync();
             }
             catch (Exception e)
@@ -86,7 +87,8 @@ internal sealed class BootstrapForm : Form
         _stage.Size = new Size(531, 30);
         Controls.Add(_stage);
 
-        _progress.Visible = _firstLaunch;
+        // Do not animate a progress bar while waiting for language choice.
+        _progress.Visible = _firstLaunch && !_chooseLanguage;
         _progress.Style = ProgressBarStyle.Marquee;
         _progress.MarqueeAnimationSpeed = 35;
         _progress.Location = new Point(22, 101 + offset);
