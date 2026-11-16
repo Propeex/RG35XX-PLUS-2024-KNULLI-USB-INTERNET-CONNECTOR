@@ -205,6 +205,9 @@ internal sealed class MainForm : Form
             }
             else
             {
+                _mayHaveActiveSession = File.Exists(Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "RG35XX_USB_FullNet", "ssh.pid"));
                 SetState(ConnectionState.Error);
             }
 
