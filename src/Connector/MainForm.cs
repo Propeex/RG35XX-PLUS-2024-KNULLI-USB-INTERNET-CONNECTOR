@@ -96,17 +96,10 @@ internal sealed class MainForm : Form
             _statusTimer.Stop();
             _statusTimer.Dispose();
             AdbProbe.StopTracking();
-            // Do not fire-and-forget: when the WinForms message loop exits,
-            // an unawaited kill-server may never finish. Port 5037 is shared
-            // and is never stopped. An explicitly preserved SSH session keeps
-            // the private ADB server alive by design.
-            if (!_mayHaveActiveSession)
-            {
-                // Use the thread pool to avoid WinForms sync-context deadlock
-                // while we wait for a bounded owned-server shutdown.
-                try { Task.Run(AdbProbe.StopDedicatedAsync).GetAwaiter().GetResult(); }
-                catch (Exception e) { System.Diagnostics.Debug.WriteLine(e); }
-            }
+            // 5037 belongs to every ADB client, including ADB Explorer.
+            // Never kill it just because the GUI closes. A tunnel is stopped
+            // through explicit STOP; other apps must be free to keep using it.
+            // No per-app 5056 server is created by this version.
         };
     }
 
