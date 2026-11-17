@@ -11,7 +11,7 @@
     <RootNamespace>RG35XXUsbInternetConnector</RootNamespace>
     <Version>0.1.0</Version>
     <FileVersion>0.1.0.0</FileVersion>
-    <InformationalVersion>0.1.0-beta.1</InformationalVersion>
+    <InformationalVersion>0.1.0-beta.2</InformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <!-- Windows 10/11 start through a tiny .NET Framework 4.x launcher.
          Only the missing .NET 8 Desktop Runtime is installed once per user. -->
