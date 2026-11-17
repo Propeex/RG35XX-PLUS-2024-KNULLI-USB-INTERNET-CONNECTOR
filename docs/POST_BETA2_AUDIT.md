@@ -41,6 +41,28 @@ temporary network settings and the exact PortMaster compatibility line,
 but scripts, SSH public key and backups can remain in user data for reuse.
 An interrupted or failed STOP must be reported as unverified, never as clean.
 
+## Unresolved publication and supply-chain choices
+
+- **Repository-wide source license:** The inspected `main` tree has no top-level
+  `LICENSE` file. The copyright owner should choose whether the source is
+  offered under a permissive/open-source license or with restricted reuse.
+  The audit does **not** invent a license or grant redistribution rights.
+  Downloading a public beta binary and reusing its source are different.
+- **Code signing:** The Windows Beta ZIP/EXEs are unsigned. GitHub asset SHA-256,
+  source-tracked CI and backend hashes help integrity checks but do not replace
+  an Authenticode signature or independent release provenance.
+- **External bootstrapping:** The optional Microsoft `dotnet-install.ps1` and
+  Google SDK Platform-Tools are retrieved over HTTPS with consent. SDK ZIP
+  SHA-256 is checked when included in Google's repository metadata; a missing
+  hash currently falls back to HTTPS plus structure validation. The
+  third-party tun2socks asset is pinned by SHA-256 and accompanied by the
+  MIT notice. These trust decisions are explicit, not equivalent to a
+  fully offline or independently signed installer.
+- **Physical release gate:** The current native Go toolchain upgrade, device
+  STOP PID verification and automatic PortMaster restoration were validated
+  through CI but not through KNULLI hardware. Do not silently replace beta.2
+  with these changes before user acceptance.
+
 ## Physical findings already confirmed
 
 The tester's initial ADB connection became reliable after selecting/resetting
