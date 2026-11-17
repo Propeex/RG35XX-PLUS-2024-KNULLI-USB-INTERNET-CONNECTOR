@@ -74,14 +74,14 @@ internal static class AdbProbe
     internal static async Task<bool> HasReadyDeviceAsync(
         bool keepServer = false, bool allowFallback = true)
     {
-        await DiscoveryGate.WaitAsync();
+        await DiscoveryGate.WaitAsync().ConfigureAwait(false);
         try
         {
             bool pinned = keepServer || !allowFallback;
             string chosen = ServerPort;
             if (pinned)
             {
-                var existing = await AdbServerProtocol.QueryAsync(chosen);
+                var existing = await AdbServerProtocol.QueryAsync(chosen).ConfigureAwait(false);
                 Volatile.Write(ref _selectedServerPresent, existing.ServerPresent);
                 Volatile.Write(ref _lastDiagnostic, existing.Ready
                     ? DescribeReady(chosen)
@@ -91,17 +91,17 @@ internal static class AdbProbe
 
             // Observe both existing ports with passive TCP host:devices-l.
             // This does not launch adb.exe, unlike "adb devices -l".
-            var dedicated = await AdbServerProtocol.QueryAsync(DedicatedPort);
-            var shared = await AdbServerProtocol.QueryAsync(SharedPort);
+            var dedicated = await AdbServerProtocol.QueryAsync(DedicatedPort).ConfigureAwait(false);
+            var shared = await AdbServerProtocol.QueryAsync(SharedPort).ConfigureAwait(false);
 
             // Another application opened the shared server while the GUI was
             // idle. Retire only our own dedicated server before selecting
             // shared, so USB is not contested by two server processes.
             if (shared.ServerPresent && dedicated.ServerPresent && OwnsDedicatedServer)
             {
-                await StopDedicatedCoreAsync();
-                dedicated = await AdbServerProtocol.QueryAsync(DedicatedPort);
-                shared = await AdbServerProtocol.QueryAsync(SharedPort);
+                await StopDedicatedCoreAsync().ConfigureAwait(false);
+                dedicated = await AdbServerProtocol.QueryAsync(DedicatedPort).ConfigureAwait(false);
+                shared = await AdbServerProtocol.QueryAsync(SharedPort).ConfigureAwait(false);
             }
 
             string selected;
@@ -132,9 +132,9 @@ internal static class AdbProbe
                 if (DateTimeOffset.UtcNow >= _nextStartAttempt)
                 {
                     _nextStartAttempt = DateTimeOffset.UtcNow.AddSeconds(8);
-                    await StartDedicatedAsync();
+                    await StartDedicatedAsync().ConfigureAwait(false);
                 }
-                result = await AdbServerProtocol.QueryAsync(DedicatedPort);
+                result = await AdbServerProtocol.QueryAsync(DedicatedPort).ConfigureAwait(false);
             }
             else
             {
@@ -187,8 +187,8 @@ internal static class AdbProbe
         {
             Task<string> output = child.StandardOutput.ReadToEndAsync(timeout.Token);
             Task<string> error = child.StandardError.ReadToEndAsync(timeout.Token);
-            await child.WaitForExitAsync(timeout.Token);
-            await Task.WhenAll(output, error);
+            await child.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            await Task.WhenAll(output, error).ConfigureAwait(false);
             // Only a server launched in this GUI lifetime may be stopped by
             // our GUI. Adopted or shared servers are deliberately left alone.
             if (child.ExitCode == 0)
@@ -207,8 +207,8 @@ internal static class AdbProbe
 
     internal static async Task StopDedicatedAsync()
     {
-        await DiscoveryGate.WaitAsync();
-        try { await StopDedicatedCoreAsync(); }
+        await DiscoveryGate.WaitAsync().ConfigureAwait(false);
+        try { await StopDedicatedCoreAsync().ConfigureAwait(false); }
         finally { DiscoveryGate.Release(); }
     }
 
@@ -236,8 +236,8 @@ internal static class AdbProbe
             {
                 Task<string> output = child.StandardOutput.ReadToEndAsync(timeout.Token);
                 Task<string> error = child.StandardError.ReadToEndAsync(timeout.Token);
-                await child.WaitForExitAsync(timeout.Token);
-                await Task.WhenAll(output, error);
+                await child.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+                await Task.WhenAll(output, error).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
