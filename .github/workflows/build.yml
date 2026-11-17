@@ -84,6 +84,11 @@ jobs:
             throw "PowerShell orchestration has parse errors."
           }
           Write-Host "Windows PowerShell orchestrator syntax OK."
+      - name: Test safe SSH and ADB shutdown without hardware
+        shell: powershell
+        run: |
+          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/Test-StopOwnership.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'SSH/ADB shutdown ownership tests failed.' }
       - name: Download verified backend payload from this workflow
         uses: actions/download-artifact@v4
         with:
