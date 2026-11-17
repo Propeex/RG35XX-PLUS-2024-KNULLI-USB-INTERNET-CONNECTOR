@@ -125,6 +125,17 @@ fi
 # Stop the watcher LAST; it may itself have invoked this script.
 stop_owned_pid "$BASE/watch.pid" "$BASE/watch-fullnet.sh"
 
+# The optional PortMaster compatibility shim changes a persistent launcher
+# under /userdata. Restore just the line carrying our own exact marker on
+# explicit STOP or a watchdog cleanup. Preserve unrelated user changes and
+# keep the backup for inspection. A missing script is fine on old installs.
+if [ -f "$BASE/compat-fullnet.sh" ]; then
+  if ! sh "$BASE/compat-fullnet.sh" restore-portmaster; then
+    echo 'WARNING: PortMaster compatibility override could not be restored.' >&2
+    FAILED=1
+  fi
+fi
+
 if [ "$FAILED" -eq 0 ] && ! ip link show "$TUN" >/dev/null 2>&1; then
   rm -f "$BASE/active"
   echo 'STOP COMPLETE: rgusb0, DNS helper and owned default route removed.'
