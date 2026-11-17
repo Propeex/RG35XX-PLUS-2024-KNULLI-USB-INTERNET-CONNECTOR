@@ -149,9 +149,12 @@ function ProcessForOwnedSSH() {
     if (-not $p -or $p.Name -ne 'ssh.exe') { return $null }
     # Public-key setup can fail while the user successfully authenticates
     # with the KNULLI password. Such a session has no -i key argument.
-    # Require our private diagnostics path and the exact loopback tunnel
-    # instead of the optional identity filename.
-    if ($p.CommandLine -notmatch 'ssh-client\.log' -or
+    # The -E option must specify OUR exact private diagnostic path,
+    # not merely any file ending in "ssh-client.log". Otherwise PID reuse
+    # could cause us to stop an unrelated SSH tunnel with similar flags.
+    $ownedLog = [regex]::Escape((Join-Path $script:state 'ssh-client.log'))
+    $logArgument = '(?i)(?:^|\s)-E\s+"?' + $ownedLog + '"?(?:\s|$)'
+    if ($p.CommandLine -notmatch $logArgument -or
         $p.CommandLine -notmatch 'root@127\.0\.0\.1' -or
         $p.CommandLine -notmatch '(\s|^)-R\s+1080(\s|$)' -or
         $p.CommandLine -notmatch '(\s|^)-p\s+2222(\s|$)') { return $null }
@@ -191,6 +194,21 @@ function StopOwnedSSH() {
             $suspect = Get-CimInstance Win32_Process -Filter "ProcessId=$text" -ErrorAction SilentlyContinue
             if ($suspect -and $suspect.Name -eq 'ssh.exe') {
                 Fail 'SSH PID refers to a live process whose ownership cannot be verified; refusing to kill or forget it.'
+            }
+            # WMI/CIM can be unavailable or return no command-line data.
+            # Cross-check the PID through the normal Windows process API
+            # before discarding an SSH marker. A negative CIM query alone is
+            # not proof that an SSH process has exited.
+            $stillRunning = $null
+            try {
+                $stillRunning = Get-Process -Id ([int]$text) -ErrorAction Stop
+            } catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
+                # PID genuinely no longer exists.
+            } catch {
+                Fail 'Could not verify whether the SSH PID is alive; preserving its marker.'
+            }
+            if ($stillRunning -and $stillRunning.ProcessName -eq 'ssh') {
+                Fail 'SSH PID is still live but command-line ownership is not verifiable; retaining its marker.'
             }
         }
         Log 'Discarding stale connector SSH ownership marker; no matching live SSH process.'
@@ -304,7 +322,27 @@ function StartSSH() {
     $info.EnvironmentVariables['RG35XX_USB_SSH_ASKPASS'] = '1'
     $info.EnvironmentVariables['DISPLAY'] = 'localhost:0'
     $p = [Diagnostics.Process]::Start($info)
-    [IO.File]::WriteAllText((Join-Path $script:state 'ssh.pid'),[string]$p.Id)
+    if (-not $p) { Fail 'Windows SSH tunnel process did not start.' }
+    try {
+        [IO.File]::WriteAllText((Join-Path $script:state 'ssh.pid'),[string]$p.Id)
+    } catch {
+        # This is the exact process instance we just launched. If its PID
+        # cannot be recorded, kill it now rather than leaving an untracked
+        # reverse SOCKS tunnel running in the background.
+        $terminated = $false
+        try {
+            if ($p.HasExited) {
+                $terminated = $true
+            } else {
+                $p.Kill()
+                $terminated = $p.WaitForExit(5000)
+            }
+        } catch { }
+        if (-not $terminated) {
+            Fail 'Cannot record SSH tunnel ownership and could not verify emergency termination. Inspect Windows processes before retrying.'
+        }
+        Fail 'Cannot record SSH tunnel ownership; the new SSH process was verified stopped.'
+    }
     $script:sshStartedHere = $true
     # A fixed 2-second sleep before each 8-second curl could make tunnel
     # setup appear frozen. Probe immediately with a short timeout, bounded
@@ -452,7 +490,7 @@ try {
             StopDevice
             Log 'Stage STOP SSH: stopping connector-owned tunnel.'
             StopOwnedSSH
-            Log 'Stage STOP ADB: shutting down connector-owned server.'
+            Log 'Stage STOP ADB: preserving shared and unverified legacy ADB servers.'
             StopOwnedAdb
             Log 'STOP completed and verified.'
         }

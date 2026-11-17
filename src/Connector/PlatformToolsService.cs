@@ -22,6 +22,13 @@ internal static class PlatformToolsService
     private static readonly Uri RepositoryBase =
         new("https://dl.google.com/android/repository/");
 
+    // Shared ADB 5037 intentionally survives GUI exit for ADB Explorer.
+    // A staged SDK folder swap while any ADB daemon is running risks file
+    // locking, a mismatched client/server version, or a forced server restart
+    // that would disconnect an unrelated application's USB session.
+    internal static bool ShouldDeferReplacement(bool existingToolsDirectory, bool sharedRunning,
+        bool legacyRunning) => existingToolsDirectory && (sharedRunning || legacyRunning);
+
     internal static async Task EnsureInstalledAsync(
         IProgress<StartupStep> progress,
         Action<string> log,
@@ -39,7 +46,8 @@ internal static class PlatformToolsService
             log("Latest official Google Platform-Tools revision: " + latest.Revision);
         }
         catch (Exception ex) when (ex is HttpRequestException or System.Xml.XmlException
-                or InvalidOperationException or TaskCanceledException)
+                or InvalidOperationException or InvalidDataException or UriFormatException
+                or OperationCanceledException)
         {
             log("SDK repository metadata unavailable: " + ex.Message);
             if (installed)
@@ -55,6 +63,30 @@ internal static class PlatformToolsService
         {
             log("Platform-Tools are up to date: " + current);
             return;
+        }
+
+        if (Directory.Exists(AppPaths.ToolsDirectory))
+        {
+            // Also guard an INCOMPLETE pre-existing SDK directory. Its adb.exe
+            // might still be running even if source.properties is missing.
+            // Passive socket requests never start a new server.
+            // Do this BEFORE download or a filesystem rename attempt, even
+            // when the running daemon was launched by a different program.
+            var shared = await AdbServerProtocol.QueryAsync("5037");
+            var legacy = await AdbServerProtocol.QueryAsync("5056");
+            if (ShouldDeferReplacement(true, shared.ServerPresent,
+                    legacy.ServerPresent))
+            {
+                if (!File.Exists(AppPaths.AdbPath))
+                    throw new InvalidOperationException(
+                        "Incomplete Platform-Tools cannot be replaced while another ADB server is active.");
+                log("Platform-Tools update deferred: an ADB server is running " +
+                    "(ports " + (shared.ServerPresent ? "5037" : "") +
+                    (shared.ServerPresent && legacy.ServerPresent ? ", " : "") +
+                    (legacy.ServerPresent ? "5056" : "") +
+                    "). Close all ADB clients before the next update attempt.");
+                return;
+            }
         }
 
         Uri download = latest?.Url ?? LatestWindowsUri;
@@ -175,10 +207,23 @@ internal static class PlatformToolsService
 
     private static async Task<SdkPackage> GetLatestStableAsync(CancellationToken ct)
     {
-        using var response = await StartupHttp.Client.GetAsync(RepositoryUri, ct);
+        // An already installed SDK must remain usable offline. Do not wait
+        // for the multi-minute archive-download limit merely to read XML.
+        using var metadataDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        metadataDeadline.CancelAfter(StartupHttp.MetadataTimeout);
+        using var response = await StartupHttp.Client.GetAsync(RepositoryUri,
+            metadataDeadline.Token);
         response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        var document = XDocument.Load(stream);
+        await using var stream = await response.Content.ReadAsStreamAsync(metadataDeadline.Token);
+        return SelectLatestStableWindowsPackage(XDocument.Load(stream));
+    }
+
+    // The official SDK XML can list several revisions of the same package.
+    // Its document order is not a "latest" guarantee: choose the maximum
+    // stable revision with a Windows archive instead of the first match.
+    internal static SdkPackage SelectLatestStableWindowsPackage(XDocument document)
+    {
+        SdkPackage? best = null;
         var candidates = document.Descendants()
             .Where(e => e.Name.LocalName == "remotePackage"
                 && (string?)e.Attribute("path") == "platform-tools");
@@ -186,14 +231,15 @@ internal static class PlatformToolsService
         foreach (var pkg in candidates)
         {
             var channel = pkg.Elements().FirstOrDefault(e => e.Name.LocalName == "channelRef");
-            // Android SDK channel-0 = stable; do not install canary packages.
             if (channel is not null && (string?)channel.Attribute("ref") != "channel-0")
                 continue;
-            var revision = pkg.Elements().FirstOrDefault(e => e.Name.LocalName == "revision")
-                ?? throw new InvalidDataException("Platform-Tools revision is missing.");
+            var revision = pkg.Elements().FirstOrDefault(e => e.Name.LocalName == "revision");
+            if (revision is null) continue;
+
             int major = ParseRevisionPart(revision, "major");
             int minor = ParseRevisionPart(revision, "minor");
             int micro = ParseRevisionPart(revision, "micro");
+            var version = new Version(major, minor, micro);
 
             var archives = pkg.Elements().FirstOrDefault(e => e.Name.LocalName == "archives");
             if (archives is null) continue;
@@ -202,10 +248,12 @@ internal static class PlatformToolsService
                 string? os = archive.Elements().FirstOrDefault(
                     e => e.Name.LocalName is "host-os" or "hostOs")?.Value;
                 if (os != "windows") continue;
+
                 var complete = archive.Elements().FirstOrDefault(e => e.Name.LocalName == "complete");
                 string? relative = complete?.Elements()
                     .FirstOrDefault(e => e.Name.LocalName == "url")?.Value.Trim();
                 if (string.IsNullOrWhiteSpace(relative)) continue;
+
                 Uri target = new(RepositoryBase, relative);
                 if (target.Scheme != Uri.UriSchemeHttps || target.Host != "dl.google.com")
                     throw new InvalidOperationException("Untrusted SDK repository URL.");
@@ -214,10 +262,14 @@ internal static class PlatformToolsService
                 string? sha = checksum?.Value.Trim();
                 if (sha is not null && (sha.Length != 64 || !sha.All(Uri.IsHexDigit)))
                     throw new InvalidDataException("SDK metadata contains malformed SHA256.");
-                return new SdkPackage(new Version(major, minor, micro), target, sha);
+
+                var candidate = new SdkPackage(version, target, sha);
+                if (best is null || candidate.Revision.CompareTo(best.Revision) > 0)
+                    best = candidate;
             }
         }
-        throw new InvalidOperationException("No stable Windows Platform-Tools package in SDK metadata.");
+        return best ?? throw new InvalidOperationException(
+            "No stable Windows Platform-Tools package in SDK metadata.");
     }
 
     private static int ParseRevisionPart(XElement revision, string part)

@@ -56,8 +56,9 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         if (!createdNew)
         {
-            MessageBox.Show("USB Internet Connector is already running.",
-                "RG35XX USB Internet Connector",
+            string selectedLanguage = LanguageSettings.Load();
+            MessageBox.Show(UiStrings.Get(selectedLanguage, "AlreadyRunning"),
+                UiStrings.Get(selectedLanguage, "Title"),
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }

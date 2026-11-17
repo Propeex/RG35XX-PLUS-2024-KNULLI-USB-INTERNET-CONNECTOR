@@ -331,8 +331,10 @@ internal sealed class MainForm : Form
             AppendLog("USB backend action failed: " + ex.GetType().Name);
             AppendLog("Details: " + ex.Message);
             if (closeAfterStop)
-                MessageBox.Show(this, "STOP failed; the device may still have active networking.",
-                    "USB Internet", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this,
+                    UiStrings.Get(_selectedLanguage, "DisconnectFailedOnExit"),
+                    UiStrings.Get(_selectedLanguage, "Title"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally
         {
@@ -342,22 +344,33 @@ internal sealed class MainForm : Form
             _actionCancellation?.Dispose();
             _actionCancellation = null;
             _busy = false;
-            _actionProgress.Visible = false;
-            _actionProgressLabel.Visible = false;
-            ApplyLanguage();
-            if (!_closed && !_closingAfterStop)
+            // A successful STOP may have synchronously closed and disposed
+            // the form before this finally block runs. Never mutate child
+            // controls of a destroyed window.
+            if (!_closed && !IsDisposed)
             {
-                _statusTimer.Start();
-                _ = PollDeviceAsync();
+                _actionProgress.Visible = false;
+                _actionProgressLabel.Visible = false;
+                ApplyLanguage();
+                if (!_closingAfterStop)
+                {
+                    _statusTimer.Start();
+                    _ = PollDeviceAsync();
+                }
             }
         }
     }
 
     private void UpdateOperationProgress(EngineAction action, string message)
     {
+        if (_closed || IsDisposed || !IsHandleCreated) return;
         if (InvokeRequired)
         {
-            BeginInvoke(new Action(() => UpdateOperationProgress(action, message)));
+            try
+            {
+                BeginInvoke(new Action(() => UpdateOperationProgress(action, message)));
+            }
+            catch (InvalidOperationException) { /* window closed during operation */ }
             return;
         }
         if (_closed || IsDisposed || !_busy) return;
@@ -582,8 +595,10 @@ internal sealed class MainForm : Form
         if (_busy)
         {
             e.Cancel = true;
-            MessageBox.Show(this, "A USB operation is still running.",
-                "USB Internet", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this,
+                UiStrings.Get(_selectedLanguage, "ActiveOperationOnExit"),
+                UiStrings.Get(_selectedLanguage, "Title"),
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         if (!ShouldDisconnect) return;
@@ -591,10 +606,9 @@ internal sealed class MainForm : Form
         // Closing an Internet session must not leave an ADB/SSH daemon behind.
         // The user can cancel quitting, but not silently leave the tunnel active.
         var answer = MessageBox.Show(this,
-            "Disconnect USB Internet and close the application?\n\n" +
-            "Yes: Disconnect safely and exit.\n" +
-            "No: Return to the application.",
-            "USB Internet", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            UiStrings.Get(_selectedLanguage, "DisconnectOnExit"),
+            UiStrings.Get(_selectedLanguage, "Title"),
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         e.Cancel = true;
         if (answer == DialogResult.Yes)
             await RunActionAsync(EngineAction.Stop, closeAfterStop: true);
@@ -605,8 +619,21 @@ internal sealed class MainForm : Form
         if (_closed || IsDisposed) return;
         if (InvokeRequired)
         {
-            BeginInvoke(new Action(() => AppendLog(message)));
+            // An ADB tracker or PowerShell log callback can arrive after
+            // the form's Win32 handle is destroyed. Drop that late event
+            // rather than letting BeginInvoke abort a live network action.
+            try { BeginInvoke(new Action(() => AppendLog(message))); }
+            catch (InvalidOperationException) { /* form closed during callback */ }
             return;
+        }
+        // Keep a lightweight GUI after days of repeated USB transitions.
+        // Full START/STOP diagnostics remain in private backend log files.
+        if (_log.TextLength > 160_000)
+        {
+            string tail = _log.Text[^100_000..];
+            int firstNewline = tail.IndexOf('\n');
+            _log.Text = firstNewline >= 0 ? tail[(firstNewline + 1)..] : tail;
+            _log.SelectionStart = _log.TextLength;
         }
         if (_log.TextLength > 0) _log.AppendText(Environment.NewLine);
         _log.AppendText($"[{DateTimeOffset.Now:HH:mm:ss}] {message}");

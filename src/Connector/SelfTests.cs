@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Windows.Forms;
+using System.Xml.Linq;
 
 namespace RG35XXUsbInternetConnector;
 
@@ -14,8 +15,48 @@ internal static class SelfTests
     {
         try
         {
+            Assert(StartupHttp.MetadataTimeout <= TimeSpan.FromSeconds(10) &&
+                StartupHttp.MetadataTimeout >= TimeSpan.FromSeconds(3),
+                "offline startup release/SDK metadata requests must fail promptly");
             Assert(UsbBackendBundle.VerifyDistribution(out string backendError),
                 "portable backend integrity: " + backendError);
+            var sdkXml = XDocument.Parse(@"<sdk-repository>
+                <remotePackage path='platform-tools'>
+                  <revision><major>34</major><minor>0</minor><micro>5</micro></revision>
+                  <archives><archive><host-os>windows</host-os><complete>
+                    <url>platform-tools-old.zip</url></complete></archive></archives>
+                </remotePackage>
+                <remotePackage path='platform-tools'>
+                  <channelRef ref='channel-1'/>
+                  <revision><major>99</major></revision>
+                  <archives><archive><host-os>windows</host-os><complete>
+                    <url>platform-tools-preview.zip</url></complete></archive></archives>
+                </remotePackage>
+                <remotePackage path='platform-tools'>
+                  <revision><major>41</major><minor>1</minor><micro>2</micro></revision>
+                  <archives><archive><host-os>linux</host-os><complete>
+                    <url>platform-tools-linux.zip</url></complete></archive></archives>
+                </remotePackage>
+                <remotePackage path='platform-tools'>
+                  <revision><major>37</major><minor>0</minor><micro>1</micro></revision>
+                  <archives><archive><host-os>windows</host-os><complete>
+                    <url>platform-tools-new.zip</url></complete></archive></archives>
+                </remotePackage>
+              </sdk-repository>");
+            var latestSdk = PlatformToolsService.SelectLatestStableWindowsPackage(sdkXml);
+            Assert(latestSdk.Revision == new Version(37, 0, 1) &&
+                latestSdk.Url.AbsolutePath.EndsWith("/platform-tools-new.zip"),
+                "SDK metadata must choose highest Windows stable, not XML first/preview/Linux");
+            Assert(!PlatformToolsService.ShouldDeferReplacement(false, true, false),
+                "first-time SDK installation is allowed before a local SDK exists");
+            Assert(!PlatformToolsService.ShouldDeferReplacement(true, false, false),
+                "SDK replacement is allowed when no ADB daemon is active");
+            Assert(PlatformToolsService.ShouldDeferReplacement(true, true, false),
+                "shared ADB 5037 must block optional SDK replacement");
+            Assert(PlatformToolsService.ShouldDeferReplacement(true, false, true),
+                "legacy ADB 5056 must block optional SDK replacement");
+            Assert(PlatformToolsService.ShouldDeferReplacement(true, true, true),
+                "any running daemon blocks optional SDK replacement");
             Assert(AdbProbe.CanStartShared(false, false, false),
                 "start standard 5037 only when no ADB server exists");
             Assert(!AdbProbe.CanStartShared(true, false, false),
@@ -69,6 +110,16 @@ internal static class SelfTests
                 "English USB reconnection limitation is explained");
             Assert(UiStrings.Get("ja-JP", "UsbReconnectHint").Contains("USB モード"),
                 "Japanese USB reconnection limitation is explained");
+            foreach (string language in new[] { "ko-KR", "en-US", "ja-JP" })
+            {
+                foreach (string key in new[] { "ActiveOperationOnExit",
+                    "DisconnectOnExit", "DisconnectFailedOnExit", "AlreadyRunning" })
+                {
+                    Assert(UiStrings.Get(language, key) != key &&
+                        !string.IsNullOrWhiteSpace(UiStrings.Get(language, key)),
+                        "Localized exit and duplicate-instance dialog: " + language + " " + key);
+                }
+            }
             Assert(UiStrings.Get("ko-KR", "InternetConnected") == "연결됨",
                 "Korean Internet connected state");
             Assert(UiStrings.Get("en-US", "ProgressStage").Contains("{0}"),

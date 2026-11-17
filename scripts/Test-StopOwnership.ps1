@@ -21,6 +21,7 @@ foreach ($name in @('ProcessForOwnedSSH', 'StopOwnedSSH', 'StopOwnedAdb')) {
 $script:state = Join-Path $env:TEMP ('rgusb-ssh-stop-test-' + [guid]::NewGuid().ToString('N'))
 $script:logs = @()
 $script:fakeProcess = $null
+$script:simulateCimFailure = $false
 $script:killed = 0
 $pidfile = Join-Path $script:state 'ssh.pid'
 $portfile = Join-Path $script:state 'adb-port.txt'
@@ -31,7 +32,17 @@ function Get-CimInstance {
     [CmdletBinding()]
     param([string]$ClassName, [string]$Filter)
     if ($ClassName -ne 'Win32_Process') { throw "Unexpected CIM class." }
+    if ($script:simulateCimFailure) { return $null }
     return $script:fakeProcess
+}
+function Get-Process {
+    [CmdletBinding()]
+    param([int]$Id)
+    if ($Id -ne 123456) { throw "Unexpected process ID." }
+    if (-not $script:fakeProcess) { return $null }
+    return [pscustomobject]@{
+        ProcessName = ($script:fakeProcess.Name -replace '\.exe$','')
+    }
 }
 function Stop-Process {
     [CmdletBinding()]
@@ -52,7 +63,8 @@ try {
         ProcessId = 123456
         Name = 'ssh.exe'
         CreationDate = [datetime]'2026-01-01T00:00:00'
-        CommandLine = 'ssh.exe -E "C:\Users\Tester\AppData\Local\RG35XX_USB_FullNet\ssh-client.log" -R 1080 -p 2222 root@127.0.0.1'
+        CommandLine = ('ssh.exe -E "{0}" -R 1080 -p 2222 root@127.0.0.1' -f
+            (Join-Path $script:state 'ssh-client.log'))
     }
     [IO.File]::WriteAllText($pidfile, '123456')
     [IO.File]::WriteAllText($portfile, '5037')
@@ -63,6 +75,26 @@ try {
     StopOwnedSSH
     if ($script:killed -ne 1 -or (Test-Path $pidfile) -or (Test-Path $portfile)) {
         throw 'A verified owned tunnel was not stopped and fully cleaned up.'
+    }
+
+    # Even an SSH command line with the SAME reverse tunnel arguments is
+    # unowned if -E points to someone else's diagnostics file. An unrelated
+    # process may reuse the PID previously stored in our marker.
+    $script:fakeProcess = [pscustomobject]@{
+        ProcessId = 123456
+        Name = 'ssh.exe'
+        CreationDate = [datetime]'2026-01-03T00:00:00'
+        CommandLine = 'ssh.exe -E "C:\OtherProgram\ssh-client.log" -R 1080 -p 2222 root@127.0.0.1'
+    }
+    [IO.File]::WriteAllText($pidfile, '123456')
+    [IO.File]::WriteAllText($portfile, '5037')
+    if (ProcessForOwnedSSH) {
+        throw 'SSH ownership was granted to an unrelated diagnostics directory.'
+    }
+    $refused = $false
+    try { StopOwnedSSH } catch { $refused = $true }
+    if (-not $refused -or $script:killed -ne 1 -or -not (Test-Path $pidfile)) {
+        throw 'Unowned SSH with matching arguments was killed or forgotten.'
     }
 
     # A PID belonging to an unrelated ssh.exe must NOT be killed, and its
@@ -82,6 +114,17 @@ try {
         -not (Test-Path $pidfile) -or -not (Test-Path $portfile)) {
         throw 'Unowned live SSH process was killed or its PID record lost.'
     }
+
+    # If CIM/WMI is unavailable but Windows Get-Process still finds SSH,
+    # do not erase an active tunnel's only ownership record.
+    $script:simulateCimFailure = $true
+    $script:fakeProcess.Name = 'ssh.exe'
+    $refused = $false
+    try { StopOwnedSSH } catch { $refused = $true }
+    if (-not $refused -or $script:killed -ne 1 -or -not (Test-Path $pidfile)) {
+        throw 'CIM-unavailable fallback discarded a live SSH ownership marker.'
+    }
+    $script:simulateCimFailure = $false
 
     # PID reuse by an unrelated non-SSH process should not be killed.
     $script:fakeProcess.Name = 'notepad.exe'
