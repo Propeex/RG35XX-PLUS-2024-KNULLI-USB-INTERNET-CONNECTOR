@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Offline regression test for the real stop-fullnet.sh ownership function.
 # Never touches /userdata, KNULLI networking, or other applications.
-set -euo pipefail
+set -Eeuo pipefail
+# Keep CI failures actionable without exposing private machine state.
+trap 'echo "Device STOP test failed near line $LINENO: $BASH_COMMAND" >&2' ERR
 root="$(cd "$(dirname "$0")/.." && pwd)"
 sourcefile="$root/native/device/stop-fullnet.sh"
 extract="$(awk '/^stop_owned_pid\(\) \{/ { capture=1 } capture { print } capture && /^}/ { exit }' "$sourcefile")"
