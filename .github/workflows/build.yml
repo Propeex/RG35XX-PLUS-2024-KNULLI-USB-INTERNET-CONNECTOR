@@ -67,10 +67,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install .NET 8 SDK
+      - name: Install .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
       - name: Parse and validate tracked Windows PowerShell 5.1 orchestrator
         shell: powershell
         run: |
