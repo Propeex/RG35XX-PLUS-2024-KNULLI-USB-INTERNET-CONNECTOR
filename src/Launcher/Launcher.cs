@@ -132,10 +132,21 @@ internal static class Launcher
         Directory.CreateDirectory(Path.GetDirectoryName(Settings));
         // The .NET 10 application uses the same portable settings.json.
         string temporary = Settings + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.WriteAllText(temporary, "{\"language\":\"" + language + "\"}",
-            new UTF8Encoding(false));
-        if (File.Exists(Settings)) File.Delete(Settings);
-        File.Move(temporary, Settings);
+        try
+        {
+            File.WriteAllText(temporary, "{\"language\":\"" + language + "\"}",
+                new UTF8Encoding(false));
+            // Preserve the previous selection if Windows crashes or the
+            // destination file becomes locked during a first-run restart.
+            if (File.Exists(Settings))
+                File.Replace(temporary, Settings, null);
+            else
+                File.Move(temporary, Settings);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     private static string FindDesktopRuntime()
