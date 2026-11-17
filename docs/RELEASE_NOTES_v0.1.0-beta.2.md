@@ -11,6 +11,7 @@ This beta focuses on reliable Windows ADB coexistence and conservative USB/SSH s
 - **External app safety:** closing KNULLI USB Link does not kill port 5037 or other programs' ADB sessions. A pre-existing active tunnel on legacy 5056 remains pinned until the user explicitly stops it. Unknown 5056 processes are never forcibly terminated.
 - **Safer SSH STOP:** verify the SSH command line and exact owned loopback reverse-tunnel arguments before stopping an SSH process; wait for verified exit before clearing the ownership marker. If an unrelated live SSH PID is found, refuse to kill or forget it. An unsuccessful STOP never claims verified remote cleanup.
 - **USB disconnection clarity:** after a device that was previously detected disappears, show a small, localized Korean/English/Japanese hint explaining that KNULLI USB mode may need to be reset if Windows does not recognize the replugged device. No automatic USB mode changes or Internet reconnection.
+- **Supported .NET 10 LTS runtime:** migrated the GUI, CI compilation and per-user first-run bootstrap from .NET 8 (support ended 2026-11-10) to .NET 10 LTS (supported through 2028-11). Existing .NET 8 installs do not satisfy the new runtime prerequisite.
 - **Real-stage progress and connection proof:** preserve the 6-stage START / 4-stage STOP display, actual native HTTPS verification, dedicated SSH key with optional default-password fallback and compact branded launcher.
 - **Regression checks:** offline fake ADB server tests and mocked Windows process-ownership tests, ARM64 helper build, PowerShell syntax check, EXE self-tests and full ZIP updater validation.
 
@@ -31,7 +32,9 @@ A tester confirmed that **after setting/resetting KNULLI's USB ADB mode**, KNULL
 5. Wait until the device is detected. Press **Connect Internet** manually. Verify the native Internet indicator, and press **Disconnect Internet** to stop it before unplugging.
 6. If Windows does not see the device after unplug/replug, use the **device's existing USB mode control** to reselect/reset USB ADB mode; no firmware installation or OS modification is required.
 
-Windows 10/11 **x64** is targeted. The ZIP does not include the Microsoft runtime, which may be installed separately with user permission. Google Platform-Tools is downloaded from its official source and stored in the program folder.
+Windows 11 **x64** is recommended; Windows 10 x64 is best-effort and is subject to Microsoft's Windows support/lifecycle limitations. The ZIP does not include the Microsoft runtime, which is installed separately with user permission. Google Platform-Tools is downloaded from its official source and stored in the program folder.
+
+**Upgrade note for beta.1 users:** beta.1's updater performs a launch test of the new internal EXE *before* the new launcher can offer to install .NET 10. On a PC with **only .NET 8**, that preflight may decline the beta.2 update. In that case **manually download and extract beta.2 into a new folder**, then launch `KNULLI USB Link.exe` and accept the .NET 10 installation prompt. Do not uninstall the old build or remove any existing `platform-tools/`, `data/` or private SSH state until the new build has been tested. If .NET 10 was already installed, the normal verified updater may work, but full release-to-release testing remains outstanding.
 
 ## Security and troubleshooting
 
