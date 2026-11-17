@@ -1,12 +1,14 @@
 # RG35XX+ (2024) KNULLI USB Internet Connector
 
-**Status: experimental v0.1.0-beta.1 prerelease.** One hardware tester confirmed a successful KNULLI USB Internet connection; final START/STOP UI transitions, ADB cleanup, fresh-runtime setup, and automatic updating are **not yet hardware-verified**. Do not mistake beta availability for a stable release.
+**Status: experimental v0.1.0-beta.2 prerelease.** The user verified recognition and coexistence with ADB Explorer when the handheld USB ADB interface is enumerated; one native USB Internet connection was proven on an earlier development EXE. The exact beta.2 START → STOP → START, fresh-runtime setup and release-to-release update still need physical testing. **USB unplug/replug may require resetting USB ADB mode on the handheld** because Windows stops enumerating the USB device. This is not a stable release.
 
-**Beta download:** [GitHub Releases — v0.1.0-beta.1](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/releases/tag/v0.1.0-beta.1). Extract the full portable ZIP, then run **`KNULLI USB Link.exe`**.
+**Beta download:** [GitHub Releases — v0.1.0-beta.2](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/releases/tag/v0.1.0-beta.2). Extract the complete portable ZIP, then run **`KNULLI USB Link.exe`**. The official GitHub Release also provides a ZIP SHA-256 checksum.
 
 A Windows desktop utility for sharing a PC's internet connection with the **Anbernic RG35XX+ (2024 edition, no built-in Wi-Fi)** running KNULLI, using a USB-C cable—without a Wi-Fi dongle.
 
 > **Model naming:** The 2024 Wi-Fi-less RG35XX+ is not the separate Wi-Fi-equipped RG35XX Plus model. Only the Wi-Fi-less 2024 unit has been tested so far. Other H700 devices are not confirmed compatible.
+
+**Shared ADB and USB unplug behavior:** The program uses the same standard port **5037** as ADB Explorer and never kills that shared ADB server on exit; an `adb.exe` background process remaining is normal. The program does **not** automatically connect/reconnect Internet, reset KNULLI USB mode, or patch firmware. When Windows does not enumerate the handheld after a cable replug, users may need to reselect KNULLI's existing USB ADB mode. See [Korean installation/recovery notes](docs/PORTABLE_INSTALL_KR.md).
 
 ## Project goals
 
