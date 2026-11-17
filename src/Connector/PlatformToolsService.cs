@@ -26,8 +26,8 @@ internal static class PlatformToolsService
     // A staged SDK folder swap while any ADB daemon is running risks file
     // locking, a mismatched client/server version, or a forced server restart
     // that would disconnect an unrelated application's USB session.
-    internal static bool ShouldDeferReplacement(bool installed, bool sharedRunning,
-        bool legacyRunning) => installed && (sharedRunning || legacyRunning);
+    internal static bool ShouldDeferReplacement(bool existingToolsDirectory, bool sharedRunning,
+        bool legacyRunning) => existingToolsDirectory && (sharedRunning || legacyRunning);
 
     internal static async Task EnsureInstalledAsync(
         IProgress<StartupStep> progress,
@@ -65,16 +65,21 @@ internal static class PlatformToolsService
             return;
         }
 
-        if (installed)
+        if (Directory.Exists(AppPaths.ToolsDirectory))
         {
-            // Passive ADB host-socket requests never start a new server.
+            // Also guard an INCOMPLETE pre-existing SDK directory. Its adb.exe
+            // might still be running even if source.properties is missing.
+            // Passive socket requests never start a new server.
             // Do this BEFORE download or a filesystem rename attempt, even
             // when the running daemon was launched by a different program.
             var shared = await AdbServerProtocol.QueryAsync("5037");
             var legacy = await AdbServerProtocol.QueryAsync("5056");
-            if (ShouldDeferReplacement(installed, shared.ServerPresent,
+            if (ShouldDeferReplacement(true, shared.ServerPresent,
                     legacy.ServerPresent))
             {
+                if (!File.Exists(AppPaths.AdbPath))
+                    throw new InvalidOperationException(
+                        "Incomplete Platform-Tools cannot be replaced while another ADB server is active.");
                 log("Platform-Tools update deferred: an ADB server is running " +
                     "(ports " + (shared.ServerPresent ? "5037" : "") +
                     (shared.ServerPresent && legacy.ServerPresent ? ", " : "") +
