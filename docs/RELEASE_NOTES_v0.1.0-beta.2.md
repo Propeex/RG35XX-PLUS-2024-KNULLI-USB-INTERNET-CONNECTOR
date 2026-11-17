@@ -26,7 +26,7 @@ A tester confirmed that **after setting/resetting KNULLI's USB ADB mode**, KNULL
 
 1. Download `RG35XX-USB-Internet-Connector.zip` and `SHA256SUMS.txt` below; optionally verify the ZIP SHA-256.
 2. Extract the **entire ZIP** to a writable folder. Start **`KNULLI USB Link.exe`**, not the internal `RG35XXUsbInternetConnector.exe`.
-3. Choose Korean, English or Japanese. Allow optional **Microsoft .NET 8 Desktop Runtime** setup if prompted, then review/accept the official Google Android SDK Platform-Tools license for first use.
+3. Choose Korean, English or Japanese. Allow optional **Microsoft .NET 10 Desktop Runtime** setup if prompted, then review/accept the official Google Android SDK Platform-Tools license for first use.
 4. On the **RG35XX+ 2024 Wi-Fi-less model** running KNULLI, enable USB ADB mode and SSH. Connect a data-capable USB-C cable.
 5. Wait until the device is detected. Press **Connect Internet** manually. Verify the native Internet indicator, and press **Disconnect Internet** to stop it before unplugging.
 6. If Windows does not see the device after unplug/replug, use the **device's existing USB mode control** to reselect/reset USB ADB mode; no firmware installation or OS modification is required.
