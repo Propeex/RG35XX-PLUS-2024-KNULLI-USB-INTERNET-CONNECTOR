@@ -63,8 +63,9 @@ internal sealed class UsbEngineRunner
             })
                 psi.ArgumentList.Add(arg);
 
-            // Keep app-managed ADB on the same isolated port as device polling.
-            // Explicit STOP shuts down only this ADB server, not other tools on 5037.
+            // Keep every PowerShell operation on the ADB server selected by
+            // device tracking: standard shared 5037 in new sessions or a
+            // pinned legacy 5056 when disconnecting an older active tunnel.
             psi.Environment["RG35XX_ADB_EXE"] = AppPaths.AdbPath;
             psi.Environment["ADB_SERVER_PORT"] = AdbProbe.ServerPort;
             psi.Environment["RG35XX_GUI"] = "1";
