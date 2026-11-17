@@ -23,6 +23,7 @@ internal sealed class MainForm : Form
     private readonly Label _deviceValue = new();
     private readonly Label _internetCaption = new();
     private readonly Label _internetValue = new();
+    private readonly Label _usbReconnectHint = new();
     private readonly ComboBox _language = new();
     private readonly Button _connectToggle = new();
     private readonly ProgressBar _actionProgress = new();
@@ -35,6 +36,7 @@ internal sealed class MainForm : Form
     private string _selectedLanguage = UiStrings.DefaultLanguage;
     private bool _engineInstalled;
     private bool _adbReady;
+    private bool _everDetectedDevice;
     private bool _internetHealthy;
     private bool _busy;
     private bool _closingAfterStop;
@@ -152,6 +154,17 @@ internal sealed class MainForm : Form
         _internetValue.Size = new Size(180, 35);
         _internetValue.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
         Controls.Add(_internetValue);
+
+        // A small localized hint appears only AFTER a previously detected
+        // device is lost. Windows cannot issue ADB recovery commands when
+        // KNULLI no longer enumerates as a USB device.
+        _usbReconnectHint.Location = new Point(25, 109);
+        _usbReconnectHint.Size = new Size(850, 25);
+        _usbReconnectHint.Font = new Font("Segoe UI", 9F);
+        _usbReconnectHint.ForeColor = Color.FromArgb(145, 93, 25);
+        _usbReconnectHint.Visible = false;
+        _usbReconnectHint.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        Controls.Add(_usbReconnectHint);
 
         _connectToggle.Location = new Point(288, 140);
         _connectToggle.Size = new Size(324, 62);
@@ -444,7 +457,10 @@ internal sealed class MainForm : Form
                     AppendLog("USB device disconnected; Internet status hidden.");
                 }
                 else
+                {
+                    _everDetectedDevice = true;
                     AppendLog("USB device connected; checking Internet separately.");
+                }
             }
 
             if (!_adbReady)
@@ -533,6 +549,8 @@ internal sealed class MainForm : Form
         _deviceValue.Text = T(_adbReady ? "DeviceConnected" : "DeviceDisconnected");
         _deviceValue.ForeColor = _adbReady
             ? Color.FromArgb(24, 129, 82) : Color.FromArgb(130, 137, 146);
+        _usbReconnectHint.Text = T("UsbReconnectHint");
+        _usbReconnectHint.Visible = !_adbReady && _everDetectedDevice;
 
         _internetCaption.Visible = _adbReady;
         _internetValue.Visible = _adbReady;
