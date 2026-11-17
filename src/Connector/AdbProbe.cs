@@ -24,6 +24,7 @@ internal static class AdbProbe
     private static CancellationTokenSource? _trackingCancellation;
     private static Task? _trackingTask;
     private static string? _trackingPort;
+    private static DateTimeOffset _nextTrackingAttempt = DateTimeOffset.MinValue;
 
     internal static string ServerPort => Volatile.Read(ref _selectedPort);
     internal static string LastDiagnostic => Volatile.Read(ref _lastDiagnostic);
@@ -270,6 +271,11 @@ internal static class AdbProbe
         {
             if (_trackingPort == port && _trackingTask is { IsCompleted: false })
                 return;
+            // If an external ADB server rejects tracking, do not spin in
+            // immediate restart cycles; the timer will retry later.
+            if (_trackingPort == port && DateTimeOffset.UtcNow < _nextTrackingAttempt)
+                return;
+            _nextTrackingAttempt = DateTimeOffset.UtcNow.AddSeconds(4);
             _trackingCancellation?.Cancel();
             _trackingCancellation?.Dispose();
 
@@ -304,6 +310,7 @@ internal static class AdbProbe
             _trackingCancellation = null;
             _trackingTask = null;
             _trackingPort = null;
+            _nextTrackingAttempt = DateTimeOffset.MinValue;
         }
     }
 }
