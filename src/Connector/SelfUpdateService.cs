@@ -21,10 +21,16 @@ internal static class SelfUpdateService
     internal static async Task<bool> CheckAndLaunchAsync(
         IProgress<StartupStep> progress, Action<string> log, CancellationToken ct)
     {
-        using var response = await StartupHttp.Client.GetAsync(Api, ct);
+        // Check only release METADATA with a bounded deadline. If GitHub
+        // is unreachable, StartupService keeps the existing program usable.
+        // A real update ZIP download is intentionally NOT limited to 8s.
+        using var metadataDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        metadataDeadline.CancelAfter(StartupHttp.MetadataTimeout);
+        using var response = await StartupHttp.Client.GetAsync(Api, metadataDeadline.Token);
         response.EnsureSuccessStatusCode();
-        await using var body = await response.Content.ReadAsStreamAsync(ct);
-        using var json = await JsonDocument.ParseAsync(body, cancellationToken: ct);
+        await using var body = await response.Content.ReadAsStreamAsync(metadataDeadline.Token);
+        using var json = await JsonDocument.ParseAsync(body,
+            cancellationToken: metadataDeadline.Token);
         if (json.RootElement.ValueKind != JsonValueKind.Array)
             throw new JsonException("Unexpected GitHub release listing.");
 
