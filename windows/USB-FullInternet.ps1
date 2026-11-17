@@ -329,13 +329,19 @@ function StartSSH() {
         # This is the exact process instance we just launched. If its PID
         # cannot be recorded, kill it now rather than leaving an untracked
         # reverse SOCKS tunnel running in the background.
+        $terminated = $false
         try {
-            if (-not $p.HasExited) {
+            if ($p.HasExited) {
+                $terminated = $true
+            } else {
                 $p.Kill()
-                [void]$p.WaitForExit(5000)
+                $terminated = $p.WaitForExit(5000)
             }
         } catch { }
-        Fail 'Cannot record SSH tunnel ownership; newly launched tunnel was stopped.'
+        if (-not $terminated) {
+            Fail 'Cannot record SSH tunnel ownership and could not verify emergency termination. Inspect Windows processes before retrying.'
+        }
+        Fail 'Cannot record SSH tunnel ownership; the new SSH process was verified stopped.'
     }
     $script:sshStartedHere = $true
     # A fixed 2-second sleep before each 8-second curl could make tunnel
