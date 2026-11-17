@@ -615,6 +615,15 @@ internal sealed class MainForm : Form
             catch (InvalidOperationException) { /* form closed during callback */ }
             return;
         }
+        // Keep a lightweight GUI after days of repeated USB transitions.
+        // Full START/STOP diagnostics remain in private backend log files.
+        if (_log.TextLength > 160_000)
+        {
+            string tail = _log.Text[^100_000..];
+            int firstNewline = tail.IndexOf('\n');
+            _log.Text = firstNewline >= 0 ? tail[(firstNewline + 1)..] : tail;
+            _log.SelectionStart = _log.TextLength;
+        }
         if (_log.TextLength > 0) _log.AppendText(Environment.NewLine);
         _log.AppendText($"[{DateTimeOffset.Now:HH:mm:ss}] {message}");
     }
