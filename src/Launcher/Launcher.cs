@@ -1,7 +1,7 @@
 // Small .NET Framework 4.x launcher (Windows 10/11 in-box runtime).
-// The actual connector is a framework-dependent .NET 8 Windows Forms EXE.
+// The actual connector is a framework-dependent .NET 10 Windows Forms EXE.
 // First-run locale selection and optional Desktop Runtime installation must
-// work even when .NET 8 is missing. No additional NuGet packages are used.
+// work even when .NET 10 is missing. No additional NuGet packages are used.
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -62,10 +62,10 @@ internal static class Launcher
         {
             var answer = MessageBox.Show(
                 Translate(language,
-                    ".NET 8 Desktop Runtime이 없습니다.\nMicrosoft 공식 설치 프로그램을 내려받아 현재 Windows 사용자 계정에 설치하시겠습니까?\n설치는 한 번만 필요합니다.",
-                    ".NET 8 Desktop Runtime is missing.\nDownload and install the official Microsoft runtime for this Windows user?\nThis is a one-time setup.",
-                    ".NET 8 Desktop Runtime がありません。\nMicrosoft 公式ランタイムをダウンロードし、このユーザーにインストールしますか？\nインストールは初回のみです。"),
-                Translate(language, ".NET 8 설치", "Install .NET 8", ".NET 8 のインストール"),
+                    ".NET 10 Desktop Runtime이 없습니다.\nMicrosoft 공식 설치 프로그램을 내려받아 현재 Windows 사용자 계정에 설치하시겠습니까?\n설치는 한 번만 필요합니다.",
+                    ".NET 10 Desktop Runtime is missing.\nDownload and install the official Microsoft runtime for this Windows user?\nThis is a one-time setup.",
+                    ".NET 10 Desktop Runtime がありません。\nMicrosoft 公式ランタイムをダウンロードし、このユーザーにインストールしますか？\nインストールは初回のみです。"),
+                Translate(language, ".NET 10 설치", "Install .NET 10", ".NET 10 のインストール"),
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (answer != DialogResult.Yes) return 0;
 
@@ -77,9 +77,9 @@ internal static class Launcher
             if (dotnet == null)
             {
                 MessageBox.Show(
-                    Translate(language, ".NET 8 설치를 확인하지 못했습니다.",
-                        ".NET 8 installation could not be verified.",
-                        ".NET 8 のインストールを確認できませんでした。"),
+                    Translate(language, ".NET 10 설치를 확인하지 못했습니다.",
+                        ".NET 10 installation could not be verified.",
+                        ".NET 10 のインストールを確認できませんでした。"),
                     "RG35XX USB Internet", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return 4;
             }
@@ -130,7 +130,7 @@ internal static class Launcher
     private static void SaveLanguage(string language)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Settings));
-        // The .NET 8 application uses the same portable settings.json.
+        // The .NET 10 application uses the same portable settings.json.
         string temporary = Settings + "." + Guid.NewGuid().ToString("N") + ".tmp";
         File.WriteAllText(temporary, "{\"language\":\"" + language + "\"}",
             new UTF8Encoding(false));
@@ -148,17 +148,17 @@ internal static class Launcher
             string desktop = Path.Combine(root, "shared", "Microsoft.WindowsDesktop.App");
             string core = Path.Combine(root, "shared", "Microsoft.NETCore.App");
             if (!Directory.Exists(desktop) || !Directory.Exists(core)) continue;
-            if (HasMajorEight(desktop) && HasMajorEight(core)) return root;
+            if (HasMajorTen(desktop) && HasMajorTen(core)) return root;
         }
         return null;
     }
 
-    private static bool HasMajorEight(string folder)
+    private static bool HasMajorTen(string folder)
     {
         try
         {
             foreach (string path in Directory.GetDirectories(folder))
-                if (Path.GetFileName(path).StartsWith("8.", StringComparison.Ordinal))
+                if (Path.GetFileName(path).StartsWith("10.", StringComparison.Ordinal))
                     return true;
         }
         catch (IOException) { }
@@ -183,7 +183,7 @@ internal static class Launcher
             command.UseShellExecute = false;
             command.CreateNoWindow = true;
             command.Arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass " +
-                "-File \"" + script + "\" -Runtime windowsdesktop -Channel 8.0 " +
+                "-File \"" + script + "\" -Runtime windowsdesktop -Channel 10.0 " +
                 "-InstallDir \"" + PrivateRuntime + "\" -NoPath";
             using (var child = Process.Start(command))
             {
@@ -195,7 +195,7 @@ internal static class Launcher
                 }
                 if (child.ExitCode != 0)
                     throw new InvalidOperationException(
-                        "The Microsoft .NET 8 installer returned exit code " + child.ExitCode);
+                        "The Microsoft .NET 10 installer returned exit code " + child.ExitCode);
             }
         }
         finally
@@ -246,8 +246,8 @@ internal static class Launcher
         internal RuntimeInstallDialog(string selected)
         {
             language = selected;
-            Text = Translate(language, ".NET 8 설치", "Install .NET 8",
-                ".NET 8 のインストール");
+            Text = Translate(language, ".NET 10 설치", "Install .NET 10",
+                ".NET 10 のインストール");
             ClientSize = new Size(540, 140);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -255,9 +255,9 @@ internal static class Launcher
             MinimizeBox = false;
             ControlBox = false;
             status.Text = Translate(language,
-                "Microsoft .NET 8 Desktop Runtime을 설치 중입니다...",
-                "Installing Microsoft .NET 8 Desktop Runtime...",
-                "Microsoft .NET 8 Desktop Runtime をインストールしています...");
+                "Microsoft .NET 10 Desktop Runtime을 설치 중입니다...",
+                "Installing Microsoft .NET 10 Desktop Runtime...",
+                "Microsoft .NET 10 Desktop Runtime をインストールしています...");
             status.Location = new Point(20, 22);
             status.Size = new Size(500, 45);
             Controls.Add(status);
