@@ -25,6 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           for script in native/device/*.sh; do sh -n "$script"; done
+          bash scripts/Test-DeviceStop.sh
           (cd native && go test ./...)
       - name: Build device binaries and fetch pinned upstream tun2socks
         shell: bash
