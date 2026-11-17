@@ -16,6 +16,15 @@ internal static class SelfTests
         {
             Assert(UsbBackendBundle.VerifyDistribution(out string backendError),
                 "portable backend integrity: " + backendError);
+            Assert(AdbProbe.CanStartDedicated(false, false, false),
+                "only an empty ADB environment permits a dedicated server");
+            Assert(!AdbProbe.CanStartDedicated(false, true, false),
+                "never launch dedicated while shared 5037 exists");
+            Assert(!AdbProbe.CanStartDedicated(true, false, false),
+                "never launch a duplicate dedicated 5056 server");
+            Assert(!AdbProbe.CanStartDedicated(false, false, true),
+                "never create a new server while a USB tunnel is pinned");
+            AdbProtocolSelfTests.RunAsync().GetAwaiter().GetResult();
             Assert(AdbProbe.HasReadyDevice("0123456789     device product:occam model:Nexus_4"),
                 "accept whitespace-separated ADB device line");
             Assert(AdbProbe.HasReadyDevice("0123456789\tdevice product:occam"),
