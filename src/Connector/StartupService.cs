@@ -23,6 +23,11 @@ internal record StartupStep(string Message, long BytesReceived = 0, long? BytesT
 
 internal static class StartupHttp
 {
+    // Metadata checks should never block an already-installed offline GUI
+    // for the full download timeout. Actual archive downloads keep the
+    // longer HTTP deadline and a user-visible first-run progress indicator.
+    internal static readonly TimeSpan MetadataTimeout = TimeSpan.FromSeconds(8);
+
     internal static readonly HttpClient Client = new(new HttpClientHandler
     {
         AutomaticDecompression = DecompressionMethods.All,
@@ -68,7 +73,7 @@ internal sealed class StartupService
                     return true;
                 }
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException
                     or JsonException or InvalidOperationException or IOException
                     or UnauthorizedAccessException or CryptographicException)
             {
