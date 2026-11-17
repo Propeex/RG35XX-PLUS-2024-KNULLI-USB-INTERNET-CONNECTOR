@@ -63,6 +63,12 @@ internal static class SelfTests
                 "adb errors cannot prove remote HTTPS");
             Assert(UiStrings.Get("ko-KR", "DeviceDisconnected") == "연결 안 됨",
                 "Korean device disconnected state");
+            Assert(UiStrings.Get("ko-KR", "UsbReconnectHint").Contains("USB 모드"),
+                "Korean USB reconnection limitation is explained");
+            Assert(UiStrings.Get("en-US", "UsbReconnectHint").Contains("USB mode"),
+                "English USB reconnection limitation is explained");
+            Assert(UiStrings.Get("ja-JP", "UsbReconnectHint").Contains("USB モード"),
+                "Japanese USB reconnection limitation is explained");
             Assert(UiStrings.Get("ko-KR", "InternetConnected") == "연결됨",
                 "Korean Internet connected state");
             Assert(UiStrings.Get("en-US", "ProgressStage").Contains("{0}"),
@@ -91,6 +97,9 @@ internal static class SelfTests
             Assert(typeof(MainForm).GetField("_deviceValue",
                     BindingFlags.Instance | BindingFlags.NonPublic) is not null,
                 "MainForm has independent device indicator");
+            Assert(typeof(MainForm).GetField("_usbReconnectHint",
+                    BindingFlags.Instance | BindingFlags.NonPublic)?.FieldType == typeof(Label),
+                "GUI has a minimal localized hint after a device goes missing");
             Assert(typeof(MainForm).GetField("_internetValue",
                     BindingFlags.Instance | BindingFlags.NonPublic) is not null,
                 "MainForm has independent Internet indicator");
