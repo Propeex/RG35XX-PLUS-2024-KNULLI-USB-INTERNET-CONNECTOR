@@ -95,6 +95,7 @@ internal sealed class MainForm : Form
             _closed = true;
             _statusTimer.Stop();
             _statusTimer.Dispose();
+            AdbProbe.StopTracking();
             // Do not fire-and-forget: when the WinForms message loop exits,
             // an unawaited kill-server may never finish. Port 5037 is shared
             // and is never stopped. An explicitly preserved SSH session keeps
@@ -387,6 +388,22 @@ internal sealed class MainForm : Form
             UiStrings.Get(_selectedLanguage, "ProgressStage"), stage, 6);
     }
 
+    // ADB's persistent host:track-devices stream notifies on state change.
+    // The callback can execute on a background thread; all WinForms work is
+    // marshalled through the UI message queue, without a new ADB process.
+    private void OnTrackedDeviceChanged()
+    {
+        if (_closed || IsDisposed || !IsHandleCreated) return;
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (!_closed && !IsDisposed) _ = PollDeviceAsync();
+            }));
+        }
+        catch (InvalidOperationException) { /* window closed meanwhile */ }
+    }
+
     private async Task PollDeviceAsync()
     {
         if (_closed || Interlocked.Exchange(ref _polling, 1) != 0) return;
@@ -398,6 +415,7 @@ internal sealed class MainForm : Form
             bool ready = await AdbProbe.HasReadyDeviceAsync(
                 keepServer, allowFallback: !_busy && !_mayHaveActiveSession);
             if (_closed || IsDisposed) return;
+            AdbProbe.EnsureTracking(OnTrackedDeviceChanged);
 
             string detail = AdbProbe.LastDiagnostic;
             if (detail != _lastAdbDiagnostic)
