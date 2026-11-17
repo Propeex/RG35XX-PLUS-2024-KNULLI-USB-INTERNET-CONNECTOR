@@ -111,3 +111,18 @@
 - A legacy 5056 server is never automatically killed by beta.2, since the newer GUI cannot independently prove it owns the daemon. An old active SSH tunnel is only pinned to 5056 for explicit STOP. Standard shared 5037 is never killed on GUI close.
 - Added Windows PowerShell mocked process/SSH STOP regression tests; ADB fake TCP socket tests and app version/translation self-tests remain. CI must pass all Windows + ARM64 jobs before PR merge. The first prerelease does not establish physical beta.2 START→STOP→START verification.
 - Preparing `v0.1.0-beta.2` as **explicitly experimental** (user requested public beta release despite unresolved USB enumeration), with portable ZIP, SHA256 checksum and digest-verifying auto-update. Stable `v1.0.0` remains blocked on real-device acceptance.
+
+
+## 2026-11-17 — Post-beta.2 reliability/security audit (Draft PR #13)
+
+- Baseline: publicly released `v0.1.0-beta.2` from main commit `2a424b15`, with Windows .NET 10 and user-verified 5037 coexistence. Public Beta 2 was **not altered** by this audit.
+- Found and addressed: Google Platform-Tools may be updated while a shared/external ADB daemon keeps SDK files open; safely defer optional SDK replacement if 5037 or legacy 5056 still listens. Never kill other programs' ADB processes to force an update.
+- Found and addressed: official Google SDK metadata XML may include multiple versions; select the highest *stable Windows* revision, not the first entry, with a synthetic version-order regression test. Bound GitHub/Google metadata checks to 8 seconds for installed/offline use, without shortening real ZIP downloads.
+- Found and addressed: Linux STOP cleared owned PID markers even when SIGTERM failed; preserve the PID and fail STOP when still live. CI runs real isolated Linux process tests for exit, TERM ignored, unrelated PID and stale PID. POSIX /proc disappearance races are handled.
+- Found and addressed: legacy PortMaster compatibility patch persisted after STOP; new STOP attempts to restore the exact injected launcher line while preserving the backup and other edits.
+- Found and addressed: Windows SSH STOP could forget PID markers when CIM/WMI failed, and SSH spawn could leave an untracked process if the PID file could not be written. Added a fallback process-existence check, exact `-E` log-path ownership, and startup failure cleanup; mocked Windows process regression tests.
+- WinForms improvements: KO/EN/JA safety/exit/duplicate-instance dialogs, late callback/disposed form guards, bounded visible diagnostic log, atomic first-run language save.
+- Supply chain: ARM64 helpers moved from out-of-support Go 1.23 to Go 1.27.4 (November 2026 security patches). Cross-builds explicitly target ARMv8.0 and pure-Go Linux/arm64; official Go minimum Linux kernel is below KNULLI's tested 4.9. Real device binary execution still needs validation.
+- Public distribution transparency: app does NOT modify firmware/USB Gadget or install persistent USB recovery, but manual Internet START **does** create temporary network state, persist network helper scripts and optionally a root SSH public key in userdata, and back up/apply a marked PortMaster launcher compatibility line; successful STOP reverts owned temporary settings.
+- Remaining acceptance: exact next candidate ZIP physical START→STOP→START, PortMaster, disconnect/replug UI, beta updater, missing .NET runtime on clean Windows, Windows file-signing. USB cable re-enumeration is still unresolved and documented.
+- Detailed module-by-module source findings and QA matrix: `docs/POST_BETA2_AUDIT.md`. Keep PR #13 separate from unrelated draft PR #11 and do not publish a new beta from untested native STOP changes.
