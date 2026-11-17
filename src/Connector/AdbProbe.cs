@@ -223,7 +223,7 @@ internal static class AdbProbe
                 }
                 catch (Exception ex) when (ex is OperationCanceledException
                     or IOException or System.Net.Sockets.SocketException
-                    or ObjectDisposedException) { }
+                    or ObjectDisposedException or InvalidDataException) { }
                 finally
                 {
                     if (!cancellation.IsCancellationRequested)
