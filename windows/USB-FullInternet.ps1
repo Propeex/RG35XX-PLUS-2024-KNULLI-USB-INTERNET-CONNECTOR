@@ -12,7 +12,7 @@ $script:adb = $env:RG35XX_ADB_EXE
 if ([string]::IsNullOrWhiteSpace($script:adb) -or -not (Test-Path -LiteralPath $script:adb)) {
     throw 'Official Google adb.exe was not supplied by the application.'
 }
-$script:port = if ($env:ADB_SERVER_PORT -match '^[0-9]{4,5}$') { $env:ADB_SERVER_PORT } else { '5056' }
+$script:port = if ($env:ADB_SERVER_PORT -match '^[0-9]{4,5}$') { $env:ADB_SERVER_PORT } else { '5037' }
 $script:base = '/userdata/system/rgusb-fullnet'
 $script:state = Join-Path $env:LOCALAPPDATA 'RG35XX_USB_FullNet'
 New-Item -ItemType Directory -Force -Path $script:state | Out-Null
