@@ -21,6 +21,7 @@ foreach ($name in @('ProcessForOwnedSSH', 'StopOwnedSSH', 'StopOwnedAdb')) {
 $script:state = Join-Path $env:TEMP ('rgusb-ssh-stop-test-' + [guid]::NewGuid().ToString('N'))
 $script:logs = @()
 $script:fakeProcess = $null
+$script:simulateCimFailure = $false
 $script:killed = 0
 $pidfile = Join-Path $script:state 'ssh.pid'
 $portfile = Join-Path $script:state 'adb-port.txt'
@@ -31,7 +32,17 @@ function Get-CimInstance {
     [CmdletBinding()]
     param([string]$ClassName, [string]$Filter)
     if ($ClassName -ne 'Win32_Process') { throw "Unexpected CIM class." }
+    if ($script:simulateCimFailure) { return $null }
     return $script:fakeProcess
+}
+function Get-Process {
+    [CmdletBinding()]
+    param([int]$Id)
+    if ($Id -ne 123456) { throw "Unexpected process ID." }
+    if (-not $script:fakeProcess) { return $null }
+    return [pscustomobject]@{
+        ProcessName = ($script:fakeProcess.Name -replace '\.exe$','')
+    }
 }
 function Stop-Process {
     [CmdletBinding()]
@@ -103,6 +114,17 @@ try {
         -not (Test-Path $pidfile) -or -not (Test-Path $portfile)) {
         throw 'Unowned live SSH process was killed or its PID record lost.'
     }
+
+    # If CIM/WMI is unavailable but Windows Get-Process still finds SSH,
+    # do not erase an active tunnel's only ownership record.
+    $script:simulateCimFailure = $true
+    $script:fakeProcess.Name = 'ssh.exe'
+    $refused = $false
+    try { StopOwnedSSH } catch { $refused = $true }
+    if (-not $refused -or $script:killed -ne 1 -or -not (Test-Path $pidfile)) {
+        throw 'CIM-unavailable fallback discarded a live SSH ownership marker.'
+    }
+    $script:simulateCimFailure = $false
 
     # PID reuse by an unrelated non-SSH process should not be killed.
     $script:fakeProcess.Name = 'notepad.exe'
