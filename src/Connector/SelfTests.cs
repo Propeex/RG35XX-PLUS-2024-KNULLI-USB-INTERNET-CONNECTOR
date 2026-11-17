@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Windows.Forms;
+using System.Xml.Linq;
 
 namespace RG35XXUsbInternetConnector;
 
@@ -16,6 +17,33 @@ internal static class SelfTests
         {
             Assert(UsbBackendBundle.VerifyDistribution(out string backendError),
                 "portable backend integrity: " + backendError);
+            var sdkXml = XDocument.Parse(@"<sdk-repository>
+                <remotePackage path='platform-tools'>
+                  <revision><major>34</major><minor>0</minor><micro>5</micro></revision>
+                  <archives><archive><host-os>windows</host-os><complete>
+                    <url>platform-tools-old.zip</url></complete></archive></archives>
+                </remotePackage>
+                <remotePackage path='platform-tools'>
+                  <channelRef ref='channel-1'/>
+                  <revision><major>99</major></revision>
+                  <archives><archive><host-os>windows</host-os><complete>
+                    <url>platform-tools-preview.zip</url></complete></archive></archives>
+                </remotePackage>
+                <remotePackage path='platform-tools'>
+                  <revision><major>41</major><minor>1</minor><micro>2</micro></revision>
+                  <archives><archive><host-os>linux</host-os><complete>
+                    <url>platform-tools-linux.zip</url></complete></archive></archives>
+                </remotePackage>
+                <remotePackage path='platform-tools'>
+                  <revision><major>37</major><minor>0</minor><micro>1</micro></revision>
+                  <archives><archive><host-os>windows</host-os><complete>
+                    <url>platform-tools-new.zip</url></complete></archive></archives>
+                </remotePackage>
+              </sdk-repository>");
+            var latestSdk = PlatformToolsService.SelectLatestStableWindowsPackage(sdkXml);
+            Assert(latestSdk.Revision == new Version(37, 0, 1) &&
+                latestSdk.Url.AbsolutePath.EndsWith("/platform-tools-new.zip"),
+                "SDK metadata must choose highest Windows stable, not XML first/preview/Linux");
             Assert(!PlatformToolsService.ShouldDeferReplacement(false, true, false),
                 "first-time SDK installation is allowed before a local SDK exists");
             Assert(!PlatformToolsService.ShouldDeferReplacement(true, false, false),
