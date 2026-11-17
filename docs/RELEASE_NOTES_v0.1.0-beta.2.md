@@ -2,7 +2,7 @@
 
 **Public beta / prerelease — 2026-11-17. Not a stable or fully hardware-verified release.**
 
-This beta focuses on reliable Windows ADB coexistence and conservative USB/SSH state handling. It **does not patch, install services on, or otherwise attempt to repair KNULLI's USB Gadget/operating system**. Internet access is connected and disconnected **only when the user presses the button**.
+This beta focuses on reliable Windows ADB coexistence and conservative USB/SSH state handling. It **does not patch KNULLI firmware, alter its USB Gadget configuration, or install a persistent USB reconnection service**. Internet START/STOP still uses its existing reversible device-side networking helpers. Internet access is connected and disconnected **only when the user presses the button**.
 
 ## Improvements
 
@@ -39,6 +39,7 @@ Windows 10/11 **x64** is targeted. The ZIP does not include the Microsoft runtim
 - The firmware's `linux` root password is publicly known. The app can use that default password as an SSH fallback; do **not** change a customized secure password back to the default merely for this program.
 - Never share SSH private keys, raw ADB device serials, personal paths, or unredacted private logs.
 - Do not kill unknown `adb.exe` processes to force USB recognition. The shared port 5037 is intentionally left running even after KNULLI USB Link closes.
+- If a legacy build left a 5056 server running, close that older app before starting the new release. The new app refuses to kill unknown ADB processes. If a confirmed stale legacy server remains after stopping the old app, a normal Windows restart can clear it without modifying the handheld firmware.
 - This software is intended for the RG35XX+ (2024) model **without built-in Wi-Fi**; similarly named or other H700 models are not confirmed supported.
 
 See the [real-hardware validation plan](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/blob/main/docs/BACKEND_TESTING.md) and [Korean installation guide](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/blob/main/docs/PORTABLE_INSTALL_KR.md).
