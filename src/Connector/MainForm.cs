@@ -344,22 +344,33 @@ internal sealed class MainForm : Form
             _actionCancellation?.Dispose();
             _actionCancellation = null;
             _busy = false;
-            _actionProgress.Visible = false;
-            _actionProgressLabel.Visible = false;
-            ApplyLanguage();
-            if (!_closed && !_closingAfterStop)
+            // A successful STOP may have synchronously closed and disposed
+            // the form before this finally block runs. Never mutate child
+            // controls of a destroyed window.
+            if (!_closed && !IsDisposed)
             {
-                _statusTimer.Start();
-                _ = PollDeviceAsync();
+                _actionProgress.Visible = false;
+                _actionProgressLabel.Visible = false;
+                ApplyLanguage();
+                if (!_closingAfterStop)
+                {
+                    _statusTimer.Start();
+                    _ = PollDeviceAsync();
+                }
             }
         }
     }
 
     private void UpdateOperationProgress(EngineAction action, string message)
     {
+        if (_closed || IsDisposed || !IsHandleCreated) return;
         if (InvokeRequired)
         {
-            BeginInvoke(new Action(() => UpdateOperationProgress(action, message)));
+            try
+            {
+                BeginInvoke(new Action(() => UpdateOperationProgress(action, message)));
+            }
+            catch (InvalidOperationException) { /* window closed during operation */ }
             return;
         }
         if (_closed || IsDisposed || !_busy) return;
