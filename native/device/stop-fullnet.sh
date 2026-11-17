@@ -73,7 +73,9 @@ stop_owned_pid() {
           return 0
         fi
         if [ -r "/proc/$PID/stat" ]; then
-          ST="$(awk '{print $3}' "/proc/$PID/stat" 2>/dev/null)"
+          # /proc entries can vanish between the access check and awk.
+          # That is a successful exit, not a shell-level exception.
+          ST="$(awk '{print $3}' "/proc/$PID/stat" 2>/dev/null || true)"
           if [ "$ST" = Z ]; then
             rm -f "$PIDFILE"
             return 0
