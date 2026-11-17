@@ -139,3 +139,35 @@ Regression acceptance:
 2. Press Connect. Confirm stage 6/6 does **not** remain visible after the backend reports `USB Internet action completed successfully.`; the Internet label goes green and the button switches to Disconnect without relaunching.
 3. Wait 1 minute, then click Disconnect and verify the SSH process, KNULLI rgusb0 route, owned port 5056 and button state reset; do not kill any independently owned port 5037 ADB daemon.
 4. Repeat START/STOP once. If 6/6 persists, provide the new `*-start.log` showing timestamps between `Stage compatibility`, `Connected:`, and `USB Internet action completed successfully.`. No SSH private key.
+
+
+## ADB single-server discovery + tracking acceptance (candidate v0.1.0-beta.2)
+
+The hardware user reported these six scenarios:
+1. Device already connected when the app starts: GUI does not detect until USB mode reset.
+2. Resetting the handheld's USB mode makes detection work.
+3. App running before plugging in the device: GUI does not detect until USB mode reset.
+4. Resetting USB mode after step 3 makes detection work.
+5. Once recognized, closing/reopening the GUI retains detection.
+6. Closing ADB Explorer disconnects device detection; only resetting KNULLI USB mode restored it.
+
+**Code finding:** Before this patch, each 2.5-second probe could call \`adb -P 5056 devices -l\` and then \`adb -P 5037 devices -l\`. ADB's client-side \`devices\` command implicitly launches the respective server if it is not running, so the app itself could create two USB-claiming ADB servers. The observed USB-reset dependency could ALSO reflect Windows USB driver/KNULLI adbd state; it cannot be conclusively attributed to dual servers without a process trace.
+
+**Fix and safety rules:**
+- Prefer **passive host:devices-l** smart-socket queries; never create an ADB daemon merely to probe whether an existing server sees the device
+- If neither server exists, start a single app-owned server at port 5056; never start 5056 while port 5037 is already listening
+- If 5037 comes online while app-owned 5056 is idle, retire only the owned 5056 so the external app can share the USB device
+- Use **host:track-devices** TCP stream on the selected server for live change notifications; retain 2.5-second fallback polling, suppress serials and throttle tracker retries
+- While START/STOP or an SSH session is active, pin the current port and do not kill/recreate/switch servers
+- If ADB Explorer stops 5037 while idle, detect its disappearance and start one dedicated 5056 server after both ports are absent; do **not** auto-START USB Internet or reconfigure the handheld's USB mode
+- Terminate only a 5056 server created by this GUI instance. Never kill an unknown 5056 listener, shared 5037 server, ADB Explorer process, or reset device-side adbd as a recovery measure
+
+**Test once in this exact order using the newest PR development ZIP (not beta.1):**
+1. Start ADB Explorer *first*, leave device plugged in, then start KNULLI USB Link. Check the log says \`existing shared\` / \`server 5037\` and device is green without USB reset
+2. With ADB Explorer closed and no USB connection, open KNULLI USB Link, then connect USB. Check dedicated \`5056\` is chosen and the device turns green without resetting USB mode
+3. With the app recognizing the device but Internet not started, open and close ADB Explorer. Watch whether selection switches and whether the device is detected without USB reset
+4. With ADB Explorer using \`5037\`, start USB Internet in KNULLI USB Link. Close ADB Explorer *only if it is safe for the connected network*. The app should not silently move an existing SSH tunnel to another port. If it loses the server, use explicit Disconnect/reconnect; no automatic Internet reconnection
+5. Check START -> STOP -> START with new server selection. The GUI should complete 6/6, turn Internet green, and switch to Disconnect, without lingering owned SSH processes
+6. If detection still requires USB reset, collect only the redacted **ADB server port/status messages** immediately before the reset. Report whether \`5037\` or \`5056\` was selected and whether ADB Explorer was running. This distinguishes server loss from lower-level USB/driver issues
+
+**Coverage:** Windows CI uses an in-process fake ADB TCP server to test framing, host device queries and state-change messages, with no actual adb.exe, no attached USB hardware and no real SSH tunnel. Physical tests are still required before merging or publishing beta.2.
