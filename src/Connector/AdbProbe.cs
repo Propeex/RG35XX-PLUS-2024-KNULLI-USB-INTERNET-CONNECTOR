@@ -4,10 +4,10 @@ using System.Threading;
 namespace RG35XXUsbInternetConnector;
 
 /// <summary>
-/// Discovers an existing ADB server WITHOUT starting a second server during
-/// "devices" checks. The app starts its isolated 5056 daemon only if neither
-/// 5037 nor 5056 is listening. One selected server is used by all USB actions.
-/// Never stop a shared 5037 server or an unowned 5056 server.
+/// Uses one shared ADB server (standard port 5037) for all new USB sessions.
+/// Passive socket queries do not spawn a second server, and the GUI never
+/// terminates shared ADB. A pre-existing legacy SSH tunnel can stay pinned
+/// to port 5056 for safe manual disconnect.
 /// </summary>
 internal static class AdbProbe
 {
@@ -190,11 +190,6 @@ internal static class AdbProbe
         // Even if we were first to start 5037, it is now shared. Closing
         // KNULLI USB Link must not kill a server relied upon by ADB Explorer.
     }
-
-    // Kept for old call sites. New builds NEVER own a 5056 server.
-    // Stopping a previously-running daemon merely because it occupies 5056
-    // would break an active old GUI or another ADB client.
-    internal static Task StopDedicatedAsync() => Task.CompletedTask;
 
     /// <summary>
     /// Subscribe to events from an already-running selected server.
