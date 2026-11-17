@@ -47,7 +47,7 @@ internal static class PlatformToolsService
         }
         catch (Exception ex) when (ex is HttpRequestException or System.Xml.XmlException
                 or InvalidOperationException or InvalidDataException or UriFormatException
-                or TaskCanceledException)
+                or OperationCanceledException)
         {
             log("SDK repository metadata unavailable: " + ex.Message);
             if (installed)
@@ -202,9 +202,14 @@ internal static class PlatformToolsService
 
     private static async Task<SdkPackage> GetLatestStableAsync(CancellationToken ct)
     {
-        using var response = await StartupHttp.Client.GetAsync(RepositoryUri, ct);
+        // An already installed SDK must remain usable offline. Do not wait
+        // for the multi-minute archive-download limit merely to read XML.
+        using var metadataDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        metadataDeadline.CancelAfter(StartupHttp.MetadataTimeout);
+        using var response = await StartupHttp.Client.GetAsync(RepositoryUri,
+            metadataDeadline.Token);
         response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        await using var stream = await response.Content.ReadAsStreamAsync(metadataDeadline.Token);
         return SelectLatestStableWindowsPackage(XDocument.Load(stream));
     }
 
