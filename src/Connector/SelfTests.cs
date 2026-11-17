@@ -15,6 +15,9 @@ internal static class SelfTests
     {
         try
         {
+            Assert(StartupHttp.MetadataTimeout <= TimeSpan.FromSeconds(10) &&
+                StartupHttp.MetadataTimeout >= TimeSpan.FromSeconds(3),
+                "offline startup release/SDK metadata requests must fail promptly");
             Assert(UsbBackendBundle.VerifyDistribution(out string backendError),
                 "portable backend integrity: " + backendError);
             var sdkXml = XDocument.Parse(@"<sdk-repository>
