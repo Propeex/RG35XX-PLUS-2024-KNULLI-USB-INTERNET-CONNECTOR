@@ -15,10 +15,10 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-      - name: Install Go 1.23
+      - name: Install Go 1.27.4
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.27.4'
           cache-dependency-path: native/go.mod
       - name: Check scripts and Go code
         shell: bash
@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p bundle/bin bundle/device bundle/third_party download
-          export GOOS=linux GOARCH=arm64 CGO_ENABLED=0
+          export GOOS=linux GOARCH=arm64 GOARM64=v8.0 CGO_ENABLED=0
           (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/daemon-launch-arm64 ./cmd/daemon-launch)
           (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/dns-bridge-arm64 ./cmd/dns-bridge)
           (cd native && go build -trimpath -ldflags="-s -w" -o ../bundle/bin/tunctl-arm64 ./cmd/tunctl)
