@@ -411,8 +411,9 @@ internal sealed class MainForm : Form
                 if (!_closed && !IsDisposed) _ = PollDeviceAsync();
             }));
         }
+        // ObjectDisposedException derives from InvalidOperationException;
+        // this single handler covers a close/dispose race on USB removal.
         catch (InvalidOperationException) { /* window closed meanwhile */ }
-        catch (ObjectDisposedException) { /* disposed during USB removal */ }
     }
 
     private async Task PollDeviceAsync()
