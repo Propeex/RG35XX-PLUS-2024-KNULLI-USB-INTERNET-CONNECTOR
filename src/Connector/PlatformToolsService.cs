@@ -22,6 +22,13 @@ internal static class PlatformToolsService
     private static readonly Uri RepositoryBase =
         new("https://dl.google.com/android/repository/");
 
+    // Shared ADB 5037 intentionally survives GUI exit for ADB Explorer.
+    // A staged SDK folder swap while any ADB daemon is running risks file
+    // locking, a mismatched client/server version, or a forced server restart
+    // that would disconnect an unrelated application's USB session.
+    internal static bool ShouldDeferReplacement(bool installed, bool sharedRunning,
+        bool legacyRunning) => installed && (sharedRunning || legacyRunning);
+
     internal static async Task EnsureInstalledAsync(
         IProgress<StartupStep> progress,
         Action<string> log,
@@ -55,6 +62,25 @@ internal static class PlatformToolsService
         {
             log("Platform-Tools are up to date: " + current);
             return;
+        }
+
+        if (installed)
+        {
+            // Passive ADB host-socket requests never start a new server.
+            // Do this BEFORE download or a filesystem rename attempt, even
+            // when the running daemon was launched by a different program.
+            var shared = await AdbServerProtocol.QueryAsync("5037");
+            var legacy = await AdbServerProtocol.QueryAsync("5056");
+            if (ShouldDeferReplacement(installed, shared.ServerPresent,
+                    legacy.ServerPresent))
+            {
+                log("Platform-Tools update deferred: an ADB server is running " +
+                    "(ports " + (shared.ServerPresent ? "5037" : "") +
+                    (shared.ServerPresent && legacy.ServerPresent ? ", " : "") +
+                    (legacy.ServerPresent ? "5056" : "") +
+                    "). Close all ADB clients before the next update attempt.");
+                return;
+            }
         }
 
         Uri download = latest?.Url ?? LatestWindowsUri;
