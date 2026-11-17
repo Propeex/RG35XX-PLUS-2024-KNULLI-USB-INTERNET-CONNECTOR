@@ -55,3 +55,18 @@ RG35XX-USB-Internet-Connector/
 USB 모드를 활성화한 뒤 기기를 감지하는 것과 ADB Explorer와의 공존은 테스트됐습니다. 단 **이 Beta의 정확한 ZIP에서 인터넷 START → STOP → START 반복, 업데이트 및 PC 신규 설치**는 아직 전체 검증되지 않았습니다.
 
 문제가 있으면 GitHub Issue에 **개인 경로·ADB 시리얼·SSH 비밀키를 제거한** 영어 로그만 공유해 주세요.
+
+
+## 연결 시 기기에 실제로 적용되는 변경
+
+**KNULLI 펌웨어, USB Gadget 설정, 부팅 서비스 또는 커널을 패치하지 않습니다.**
+하지만 USB 인터넷을 구현하려면 사용자가 **인터넷 연결**을 눌렀을 때 다음과 같은 기기 사용자 데이터·임시 네트워크 설정 변경이 필요합니다.
+
+- `/userdata/system/rgusb-fullnet` 아래에 검증된 네트워크 도구와 실행 스크립트를 복사합니다. 이 파일은 사용 편의를 위해 STOP 후에도 남을 수 있습니다.
+- SSH 공개키 등록이 가능한 경우 기기의 root `authorized_keys`에 전용 *공개키*를 추가합니다. 다른 키는 지우지 않으며, 공개키는 STOP 이후에도 재사용 목적으로 남습니다. Windows 개인키는 사용자별 비공개 경로에만 저장합니다.
+- 인터넷 연결 중에만 `rgusb0`, 기본 IPv4 경로, 임시 DNS 리졸버와 주소 별칭을 설정합니다. STOP은 프로그램 소유 자원을 확인하며 되돌립니다.
+- PortMaster 호환성 보완이 필요한 경우 `/userdata/roms/ports/PortMaster.sh`를 백업한 후 식별 가능한 한 줄을 추가합니다. **이번 점검 버전부터** 정상 STOP 시 그 한 줄을 자동 제거하고 백업 및 사용자 변경 사항은 보존하도록 개선했습니다. 비정상 종료 또는 USB 케이블 단절로 원격 STOP이 불가능하면 정리가 완료됐다고 표시하지 않습니다.
+
+**관련 네트워크 통신:** 기기의 DNS 요청은 Cloudflare DNS-over-HTTPS(`cloudflare-dns.com`)를 사용하고, 연결 상태는 `example.com`에 대한 HTTPS 요청으로 검증합니다. Windows에서는 GitHub Release 업데이트 정보와 Google 공식 SDK 정보를 조회할 수 있습니다. 이 동작과 프로그램의 펌웨어 수정 여부를 혼동하지 마세요.
+
+이 문서에 기술된 STOP 보완은 [검토 PR #13](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/pull/13)에 있으며, **현재 공개 Beta 2에는 아직 포함되지 않았습니다.** 실기기 검증 전에는 공개 Beta 2와 검토 중인 수정판을 구분해 주세요.
