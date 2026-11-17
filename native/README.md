@@ -1,19 +1,55 @@
-# Native device helpers (prototype sources)
+# KNULLI Linux ARM64 network helpers
 
-These files were migrated from the user's prior **v1.4** KNULLI USB connectivity prototype, instead of copying opaque ELF executables into this public repository.
+These **tracked, auditable sources** originated from the v1.4 connectivity
+prototype and are now built by GitHub Actions for the experimental public
+KNULLI USB Link Windows beta.
 
-- `daemon-launch`: starts helpers in separate sessions so they survive ADB shell termination.
-- `tunctl`: creates/deletes a temporary persistent Linux ARM64 TUN device.
-- `dns-bridge`: localhost-bound DoH relay through the reverse SSH SOCKS tunnel.
+The native Go 1.27.4 build (supported and security-patched as of
+2026-11-17) compiles three statically linked Linux/arm64 programs with
+`CGO_ENABLED=0` and `GOARM64=v8.0`:
 
-They use only Go's standard library. The native CI workflow tests the DNS code and builds reproducible **Linux ARM64** executables. A compiled binary is **not** automatically released or installed on users' machines yet; license/ownership must be reviewed before distribution. 
+- `daemon-launch`: detaches the network helpers from the ADB shell session
+- `tunctl`: creates and deletes an application-owned transient TUN interface
+- `dns-bridge`: local DNS-over-HTTPS relay over the manually started SSH SOCKS tunnel
 
-`tun2socks` is a separate third-party project by Jason Lyu (`xjasonlyu/tun2socks`), licensed MIT as of v2.7.0. The historical backend downloads that precise release from GitHub with its pinned SHA-256. We do not bundle tun2socks in this source repository. Its license and attribution must be included in any future official binary distribution.
+The separately maintained `xjasonlyu/tun2socks` v2.7.0 ARM64 binary is
+retrieved in CI only from its pinned GitHub release asset, SHA-256-verified,
+and shipped with its MIT attribution.
 
-## Device shell scripts
+## Distribution and deployment
 
-Original KNULLI `start-fullnet.sh`, `stop-fullnet.sh`, `compat-fullnet.sh`, `check-fullnet.sh`, `watch-fullnet.sh` and `setup-ssh-key.sh` have been migrated into `native/device/`. The Linux CI workflow validates their POSIX shell syntax. This is source audit/migration, **not** evidence of automatic deployment or physical-device reliability.
+The Windows CI creates a checksummed **sidecar `backend/` directory**
+containing the ARM64 binaries, device shell scripts, Windows PowerShell
+orchestrator, `SHA256SUMS` and required third-party attribution. The
+portable Windows ZIP includes that directory beside the EXE; the EXE checks
+its hashes before manual START/STOP. No unsupported historical ZIP is needed.
 
-## CI embedding pipeline
+Manual **START** may copy these tools into
+`/userdata/system/rgusb-fullnet` and temporarily configure the owned
+TUN, DNS resolver and route. It also registers the user's dedicated SSH
+*public* key in root's `authorized_keys` when supported. The optional
+PortMaster compatibility shim backs up the existing launcher and inserts a
+marked line only when needed; STOP now attempts to remove that line while
+preserving the backup and unrelated changes.
 
-The primary GitHub Actions Windows build workflow now compiles the three Go ARM64 helpers, verifies the exact upstream xjasonlyu/tun2socks v2.7.0 ARM64 ZIP SHA-256, includes `third_party/tun2socks-LICENSE.txt`, bundles the tracked PowerShell + shell sources with `SHA256SUMS`, and embeds them in the WinForms EXE. No historical local ZIP is required for that build. `native.yml` continues to test and independently build native ARM64 helpers. This is not evidence of real-device runtime success.
+Manual **STOP** verifies removal of the application-owned networking state,
+preserves PID markers for helpers that refuse to stop, and reports incomplete
+cleanup instead of falsely claiming success. Scripts and the SSH public key
+may remain under `/userdata` for reuse; this is **not a read-only operation**
+on device user data.
+
+The program does **not** patch KNULLI firmware, alter USB Gadget modes,
+change startup services or install a background USB-recovery daemon. The
+observed USB cable unplug/replug re-enumeration bug remains a known
+limitation, not a feature silently repaired by these helpers.
+
+## Verification
+
+Both ARM64 CI workflows run `go test ./...`, POSIX shell syntax checks
+and the isolated `scripts/Test-DeviceStop.sh` process ownership tests.
+The Windows CI also compiles the GUI and validates the portable backend.
+
+CI is **not** a substitute for real RG35XX+ 2024 hardware testing.
+In particular the **exact new helper build** must still be checked on
+KNULLI's Linux 4.9 ARM64 kernel with native Internet START → STOP → START,
+DNS, PortMaster and abnormal unplug scenarios.
