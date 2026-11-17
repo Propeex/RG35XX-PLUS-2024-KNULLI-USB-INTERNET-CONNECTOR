@@ -484,7 +484,7 @@ try {
             StopDevice
             Log 'Stage STOP SSH: stopping connector-owned tunnel.'
             StopOwnedSSH
-            Log 'Stage STOP ADB: shutting down connector-owned server.'
+            Log 'Stage STOP ADB: preserving shared and unverified legacy ADB servers.'
             StopOwnedAdb
             Log 'STOP completed and verified.'
         }
