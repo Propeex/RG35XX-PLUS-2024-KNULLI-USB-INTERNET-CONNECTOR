@@ -40,6 +40,8 @@ jobs:
           set -euo pipefail
           version="$(sed -n 's/.*<InformationalVersion>\([^<]*\)<\/InformationalVersion>.*/\1/p' src/Connector/Connector.csproj)"
           test "$version" = "0.1.0-beta.2" || { echo "Unexpected version: $version"; exit 1; }
+          grep -Fq '<TargetFramework>net10.0-windows</TargetFramework>' src/Connector/Connector.csproj \
+            || { echo 'Public release must target supported .NET 10 LTS'; exit 1; }
           current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
           test "$current_main" = "$VERIFIED_SHA" || { echo 'main changed since tested commit; refusing stale release'; exit 1; }
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v0.1.0-beta.2" >/dev/null 2>&1; then
