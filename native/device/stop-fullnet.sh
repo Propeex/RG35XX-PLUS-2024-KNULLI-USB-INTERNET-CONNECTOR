@@ -68,20 +68,32 @@ stop_owned_pid() {
       kill "$PID" 2>/dev/null || true
       I=0
       while [ "$I" -lt 4 ]; do
-        [ ! -r "/proc/$PID/cmdline" ] && break
+        if [ ! -r "/proc/$PID/cmdline" ]; then
+          rm -f "$PIDFILE"
+          return 0
+        fi
         if [ -r "/proc/$PID/stat" ]; then
           ST="$(awk '{print $3}' "/proc/$PID/stat" 2>/dev/null)"
-          [ "$ST" = Z ] && break
+          if [ "$ST" = Z ]; then
+            rm -f "$PIDFILE"
+            return 0
+          fi
         fi
         sleep 1
         I=$((I+1))
       done
+      # Never forget a still-running helper. A future manual STOP must be
+      # able to retry cleanup using the original ownership evidence.
+      echo "WARNING: owned PID $PID is still alive after SIGTERM; preserving $PIDFILE." >&2
+      FAILED=1
+      return 0
     else
       echo "WARNING: PID $PID belongs to another process; will not kill." >&2
       FAILED=1
       return 0
     fi
   fi
+  # Process already exited before STOP began; this marker is safely stale.
   rm -f "$PIDFILE"
 }
 stop_owned_pid "$BASE/tun.pid" "$BASE/tun2socks"
