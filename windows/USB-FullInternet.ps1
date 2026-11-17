@@ -170,8 +170,8 @@ function StopOwnedSSH() {
             $stopped = $false
             for ($attempt = 0; $attempt -lt 10; $attempt++) {
                 $remaining = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $p.ProcessId) -ErrorAction SilentlyContinue
-                if (-not $remaining -or
-                    ($remaining.Name -eq 'ssh.exe' -and $remaining.CreationDate -ne $p.CreationDate)) {
+                if (-not $remaining -or $remaining.Name -ne 'ssh.exe' -or
+                    $remaining.CreationDate -ne $p.CreationDate) {
                     $stopped = $true
                     break
                 }
