@@ -412,6 +412,7 @@ internal sealed class MainForm : Form
             }));
         }
         catch (InvalidOperationException) { /* window closed meanwhile */ }
+        catch (ObjectDisposedException) { /* disposed during USB removal */ }
     }
 
     private async Task PollDeviceAsync()
