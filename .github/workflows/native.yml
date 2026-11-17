@@ -24,6 +24,7 @@ jobs:
           for script in native/device/*.sh; do
             sh -n "$script"
           done
+          bash scripts/Test-DeviceStop.sh
       - name: Test native Go sources
         working-directory: native
         run: go test ./...
