@@ -16,14 +16,20 @@ internal static class SelfTests
         {
             Assert(UsbBackendBundle.VerifyDistribution(out string backendError),
                 "portable backend integrity: " + backendError);
-            Assert(AdbProbe.CanStartDedicated(false, false, false),
-                "only an empty ADB environment permits a dedicated server");
-            Assert(!AdbProbe.CanStartDedicated(false, true, false),
-                "never launch dedicated while shared 5037 exists");
-            Assert(!AdbProbe.CanStartDedicated(true, false, false),
-                "never launch a duplicate dedicated 5056 server");
-            Assert(!AdbProbe.CanStartDedicated(false, false, true),
-                "never create a new server while a USB tunnel is pinned");
+            Assert(AdbProbe.CanStartShared(false, false, false),
+                "start standard 5037 only when no ADB server exists");
+            Assert(!AdbProbe.CanStartShared(true, false, false),
+                "never start an already running 5037 server");
+            Assert(!AdbProbe.CanStartShared(false, true, false),
+                "never launch 5037 while old 5056 owns USB");
+            Assert(!AdbProbe.CanStartShared(false, false, true),
+                "never restart a missing server during an active tunnel");
+            Assert(AdbProbe.SelectDiscoveryPort(false, "5056") == "5037",
+                "idle discovery switches to 5037, independent of previous session");
+            Assert(AdbProbe.SelectDiscoveryPort(true, "5056") == "5056",
+                "active legacy tunnel remains pinned to 5056");
+            Assert(AdbProbe.SelectDiscoveryPort(true, "5037") == "5037",
+                "active shared tunnel remains pinned to 5037");
             AdbProtocolSelfTests.RunAsync().GetAwaiter().GetResult();
             Assert(AdbProbe.HasReadyDevice("0123456789     device product:occam model:Nexus_4"),
                 "accept whitespace-separated ADB device line");
