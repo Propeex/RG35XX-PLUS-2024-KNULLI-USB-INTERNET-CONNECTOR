@@ -1,4 +1,4 @@
-name: Publish first KNULLI USB Link beta
+name: Publish KNULLI USB Link beta
 
 # Release only the exact main-branch commit that successfully built and
 # verified the Windows portable ZIP. No pull request can publish a release.
@@ -13,7 +13,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: knulli-usb-link-v0.1.0-beta.1
+  group: knulli-usb-link-v0.1.0-beta.2
   cancel-in-progress: false
 
 jobs:
@@ -39,10 +39,12 @@ jobs:
         run: |
           set -euo pipefail
           version="$(sed -n 's/.*<InformationalVersion>\([^<]*\)<\/InformationalVersion>.*/\1/p' src/Connector/Connector.csproj)"
-          test "$version" = "0.1.0-beta.1" || { echo "Unexpected version: $version"; exit 1; }
+          test "$version" = "0.1.0-beta.2" || { echo "Unexpected version: $version"; exit 1; }
+          grep -Fq '<TargetFramework>net10.0-windows</TargetFramework>' src/Connector/Connector.csproj \
+            || { echo 'Public release must target supported .NET 10 LTS'; exit 1; }
           current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
           test "$current_main" = "$VERIFIED_SHA" || { echo 'main changed since tested commit; refusing stale release'; exit 1; }
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v0.1.0-beta.1" >/dev/null 2>&1; then
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v0.1.0-beta.2" >/dev/null 2>&1; then
             echo 'Beta tag already exists; never publish an unintended replacement.'
             echo 'skip=true' >> "$GITHUB_OUTPUT"
           else
@@ -80,15 +82,15 @@ jobs:
           VERIFIED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          gh release create v0.1.0-beta.1 \
+          gh release create v0.1.0-beta.2 \
             dist/RG35XX-USB-Internet-Connector.zip \
             dist/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --target "$VERIFIED_SHA" \
-            --title "KNULLI USB Link v0.1.0-beta.1" \
+            --title "KNULLI USB Link v0.1.0-beta.2" \
             --prerelease \
             --latest=false \
-            --notes-file docs/RELEASE_NOTES_v0.1.0-beta.1.md
+            --notes-file docs/RELEASE_NOTES_v0.1.0-beta.2.md
 
       - name: Check published asset digests
         if: steps.guard.outputs.skip == 'false'
@@ -97,8 +99,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v0.1.0-beta.1" \
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v0.1.0-beta.2" \
             --jq '. | {tag_name, draft, prerelease, assets: [.assets[] | {name, size, digest}]}' | tee dist/release-result.json
-          jq -e '.tag_name == "v0.1.0-beta.1" and .draft == false and .prerelease == true' dist/release-result.json
+          jq -e '.tag_name == "v0.1.0-beta.2" and .draft == false and .prerelease == true' dist/release-result.json
           jq -e '.assets | any(.name == "RG35XX-USB-Internet-Connector.zip" and (.digest | startswith("sha256:")))' dist/release-result.json
           jq -e '.assets | any(.name == "SHA256SUMS.txt")' dist/release-result.json

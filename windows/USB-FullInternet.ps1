@@ -12,7 +12,7 @@ $script:adb = $env:RG35XX_ADB_EXE
 if ([string]::IsNullOrWhiteSpace($script:adb) -or -not (Test-Path -LiteralPath $script:adb)) {
     throw 'Official Google adb.exe was not supplied by the application.'
 }
-$script:port = if ($env:ADB_SERVER_PORT -match '^[0-9]{4,5}$') { $env:ADB_SERVER_PORT } else { '5056' }
+$script:port = if ($env:ADB_SERVER_PORT -match '^[0-9]{4,5}$') { $env:ADB_SERVER_PORT } else { '5037' }
 $script:base = '/userdata/system/rgusb-fullnet'
 $script:state = Join-Path $env:LOCALAPPDATA 'RG35XX_USB_FullNet'
 New-Item -ItemType Directory -Force -Path $script:state | Out-Null
@@ -158,31 +158,54 @@ function ProcessForOwnedSSH() {
     return $p
 }
 function StopOwnedSSH() {
+    $pidfile = Join-Path $script:state 'ssh.pid'
+    $portfile = Join-Path $script:state 'adb-port.txt'
     $p = ProcessForOwnedSSH
     if ($p) {
+        # Do not erase ownership evidence until the verified ssh.exe has
+        # actually exited. A failed Stop-Process must never be logged as
+        # a completed STOP while an orphan tunnel is still running.
         try {
             Stop-Process -Id ([int]$p.ProcessId) -ErrorAction Stop
-            Log 'Stopped connector-owned Windows SSH process.'
+            $stopped = $false
+            for ($attempt = 0; $attempt -lt 10; $attempt++) {
+                $remaining = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $p.ProcessId) -ErrorAction SilentlyContinue
+                if (-not $remaining -or $remaining.Name -ne 'ssh.exe' -or
+                    $remaining.CreationDate -ne $p.CreationDate) {
+                    $stopped = $true
+                    break
+                }
+                Start-Sleep -Milliseconds 250
+            }
+            if (-not $stopped) { Fail 'Verified SSH process did not exit after STOP.' }
+            Log 'Stopped and verified connector-owned Windows SSH process.'
         } catch {
-            Log ("SSH stop warning: " + $_.Exception.Message)
+            Log ("SSH stop verification failed: " + $_.Exception.Message)
+            Fail 'Could not verify termination of connector-owned SSH tunnel; ownership record retained.'
         }
+    } elseif (Test-Path -LiteralPath $pidfile) {
+        # The PID can be stale or reused. Ignore markers for exited processes,
+        # but never discard a live SSH PID that we cannot prove is ours.
+        $text = (Get-Content -LiteralPath $pidfile -Raw).Trim()
+        if ($text -match '^[0-9]+$') {
+            $suspect = Get-CimInstance Win32_Process -Filter "ProcessId=$text" -ErrorAction SilentlyContinue
+            if ($suspect -and $suspect.Name -eq 'ssh.exe') {
+                Fail 'SSH PID refers to a live process whose ownership cannot be verified; refusing to kill or forget it.'
+            }
+        }
+        Log 'Discarding stale connector SSH ownership marker; no matching live SSH process.'
     }
-    # Never kill another SSH process due to PID reuse.
-    Remove-Item -LiteralPath (Join-Path $script:state 'ssh.pid') -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $script:state 'adb-port.txt') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $pidfile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $portfile -Force -ErrorAction SilentlyContinue
 }
 function StopOwnedAdb() {
-    # The standard 5037 daemon may be owned by an IDE or another app.
-    # Never stop it. Only port 5056 is connector-managed.
-    if ($script:port -ne '5056') {
-        Log 'Shared ADB port 5037 preserved; other clients may be using it.'
-        return
-    }
-    try {
-        [void](RunAdb @('kill-server'))
-        Log 'Requested shutdown of connector-specific ADB server on 5056.'
-    } catch {
-        Log ("ADB server stop warning: " + $_.Exception.Message)
+    # Current releases use shared 5037. Old sessions may still be pinned to
+    # private 5056, but the new process has no reliable proof of ownership
+    # of that listening ADB daemon. Do not kill either server automatically.
+    if ($script:port -eq '5056') {
+        Log 'Legacy ADB port 5056 preserved; ownership of that server is not independently verified.'
+    } else {
+        Log 'Shared ADB port 5037 preserved for other applications.'
     }
 }
 function CommandPath([string]$Name) {

@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -23,6 +24,7 @@ internal sealed class MainForm : Form
     private readonly Label _deviceValue = new();
     private readonly Label _internetCaption = new();
     private readonly Label _internetValue = new();
+    private readonly Label _usbReconnectHint = new();
     private readonly ComboBox _language = new();
     private readonly Button _connectToggle = new();
     private readonly ProgressBar _actionProgress = new();
@@ -35,6 +37,7 @@ internal sealed class MainForm : Form
     private string _selectedLanguage = UiStrings.DefaultLanguage;
     private bool _engineInstalled;
     private bool _adbReady;
+    private bool _everDetectedDevice;
     private bool _internetHealthy;
     private bool _busy;
     private bool _closingAfterStop;
@@ -57,7 +60,10 @@ internal sealed class MainForm : Form
 
     internal MainForm()
     {
-        Text = "KNULLI USB Link — RG35XX+ (2024)";
+        string version = typeof(MainForm).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion.Split('+')[0] ?? "development";
+        Text = "KNULLI USB Link v" + version + " — RG35XX+ (2024)";
         // Use the branded PE icon for this window and the Windows taskbar.
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
         catch (Exception ex) when (ex is IOException or ArgumentException
@@ -95,17 +101,11 @@ internal sealed class MainForm : Form
             _closed = true;
             _statusTimer.Stop();
             _statusTimer.Dispose();
-            // Do not fire-and-forget: when the WinForms message loop exits,
-            // an unawaited kill-server may never finish. Port 5037 is shared
-            // and is never stopped. An explicitly preserved SSH session keeps
-            // the private ADB server alive by design.
-            if (!_mayHaveActiveSession)
-            {
-                // Use the thread pool to avoid WinForms sync-context deadlock
-                // while we wait for a bounded owned-server shutdown.
-                try { Task.Run(AdbProbe.StopDedicatedAsync).GetAwaiter().GetResult(); }
-                catch (Exception e) { System.Diagnostics.Debug.WriteLine(e); }
-            }
+            AdbProbe.StopTracking();
+            // 5037 belongs to every ADB client, including ADB Explorer.
+            // Never kill it just because the GUI closes. A tunnel is stopped
+            // through explicit STOP; other apps must be free to keep using it.
+            // No per-app 5056 server is created by this version.
         };
     }
 
@@ -158,6 +158,17 @@ internal sealed class MainForm : Form
         _internetValue.Size = new Size(180, 35);
         _internetValue.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
         Controls.Add(_internetValue);
+
+        // A small localized hint appears only AFTER a previously detected
+        // device is lost. Windows cannot issue ADB recovery commands when
+        // KNULLI no longer enumerates as a USB device.
+        _usbReconnectHint.Location = new Point(25, 109);
+        _usbReconnectHint.Size = new Size(850, 25);
+        _usbReconnectHint.Font = new Font("Segoe UI", 9F);
+        _usbReconnectHint.ForeColor = Color.FromArgb(145, 93, 25);
+        _usbReconnectHint.Visible = false;
+        _usbReconnectHint.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        Controls.Add(_usbReconnectHint);
 
         _connectToggle.Location = new Point(288, 140);
         _connectToggle.Size = new Size(324, 62);
@@ -387,6 +398,24 @@ internal sealed class MainForm : Form
             UiStrings.Get(_selectedLanguage, "ProgressStage"), stage, 6);
     }
 
+    // ADB's persistent host:track-devices stream notifies on state change.
+    // The callback can execute on a background thread; all WinForms work is
+    // marshalled through the UI message queue, without a new ADB process.
+    private void OnTrackedDeviceChanged()
+    {
+        if (_closed || IsDisposed || !IsHandleCreated) return;
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (!_closed && !IsDisposed) _ = PollDeviceAsync();
+            }));
+        }
+        // ObjectDisposedException derives from InvalidOperationException;
+        // this single handler covers a close/dispose race on USB removal.
+        catch (InvalidOperationException) { /* window closed meanwhile */ }
+    }
+
     private async Task PollDeviceAsync()
     {
         if (_closed || Interlocked.Exchange(ref _polling, 1) != 0) return;
@@ -398,6 +427,7 @@ internal sealed class MainForm : Form
             bool ready = await AdbProbe.HasReadyDeviceAsync(
                 keepServer, allowFallback: !_busy && !_mayHaveActiveSession);
             if (_closed || IsDisposed) return;
+            AdbProbe.EnsureTracking(OnTrackedDeviceChanged);
 
             string detail = AdbProbe.LastDiagnostic;
             if (detail != _lastAdbDiagnostic)
@@ -433,7 +463,10 @@ internal sealed class MainForm : Form
                     AppendLog("USB device disconnected; Internet status hidden.");
                 }
                 else
+                {
+                    _everDetectedDevice = true;
                     AppendLog("USB device connected; checking Internet separately.");
+                }
             }
 
             if (!_adbReady)
@@ -522,6 +555,8 @@ internal sealed class MainForm : Form
         _deviceValue.Text = T(_adbReady ? "DeviceConnected" : "DeviceDisconnected");
         _deviceValue.ForeColor = _adbReady
             ? Color.FromArgb(24, 129, 82) : Color.FromArgb(130, 137, 146);
+        _usbReconnectHint.Text = T("UsbReconnectHint");
+        _usbReconnectHint.Visible = !_adbReady && _everDetectedDevice;
 
         _internetCaption.Visible = _adbReady;
         _internetValue.Visible = _adbReady;

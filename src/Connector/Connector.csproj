@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -11,10 +11,10 @@
     <RootNamespace>RG35XXUsbInternetConnector</RootNamespace>
     <Version>0.1.0</Version>
     <FileVersion>0.1.0.0</FileVersion>
-    <InformationalVersion>0.1.0-beta.1</InformationalVersion>
+    <InformationalVersion>0.1.0-beta.2</InformationalVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <!-- Windows 10/11 start through a tiny .NET Framework 4.x launcher.
-         Only the missing .NET 8 Desktop Runtime is installed once per user. -->
+         Only the missing .NET 10 Desktop Runtime is installed once per user. -->
     <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
     <SelfContained>false</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

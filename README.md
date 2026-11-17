@@ -1,12 +1,14 @@
 # RG35XX+ (2024) KNULLI USB Internet Connector
 
-**Status: experimental v0.1.0-beta.1 prerelease.** One hardware tester confirmed a successful KNULLI USB Internet connection; final START/STOP UI transitions, ADB cleanup, fresh-runtime setup, and automatic updating are **not yet hardware-verified**. Do not mistake beta availability for a stable release.
+**Status: experimental v0.1.0-beta.2 prerelease.** The user verified recognition and coexistence with ADB Explorer when the handheld USB ADB interface is enumerated; one native USB Internet connection was proven on an earlier development EXE. The exact beta.2 START → STOP → START, fresh-runtime setup and release-to-release update still need physical testing. **USB unplug/replug may require resetting USB ADB mode on the handheld** because Windows stops enumerating the USB device. This is not a stable release.
 
-**Beta download:** [GitHub Releases — v0.1.0-beta.1](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/releases/tag/v0.1.0-beta.1). Extract the full portable ZIP, then run **`KNULLI USB Link.exe`**.
+**Beta download:** [GitHub Releases — v0.1.0-beta.2](https://github.com/Propeex/RG35XX-PLUS-2024-KNULLI-USB-INTERNET-CONNECTOR/releases/tag/v0.1.0-beta.2). Extract the complete portable ZIP, then run **`KNULLI USB Link.exe`**. The official GitHub Release also provides a ZIP SHA-256 checksum.
 
 A Windows desktop utility for sharing a PC's internet connection with the **Anbernic RG35XX+ (2024 edition, no built-in Wi-Fi)** running KNULLI, using a USB-C cable—without a Wi-Fi dongle.
 
 > **Model naming:** The 2024 Wi-Fi-less RG35XX+ is not the separate Wi-Fi-equipped RG35XX Plus model. Only the Wi-Fi-less 2024 unit has been tested so far. Other H700 devices are not confirmed compatible.
+
+**Shared ADB and USB unplug behavior:** The program uses the same standard port **5037** as ADB Explorer and never kills that shared ADB server on exit; an `adb.exe` background process remaining is normal. The program does **not** automatically connect/reconnect Internet, reset KNULLI USB mode, or patch firmware. When Windows does not enumerate the handheld after a cable replug, users may need to reselect KNULLI's existing USB ADB mode. See [Korean installation/recovery notes](docs/PORTABLE_INSTALL_KR.md).
 
 ## Project goals
 
@@ -66,11 +68,11 @@ To be determined after auditing the legacy backend and bundled dependencies. Do 
 
 ## Portable folder distribution — development build
 
-Following user hardware feedback, the delivery format is **a small ZIP of a folder**, not a lone self-contained EXE. Download the newest successful `windows-portable-zip` build, extract the inner ZIP, then launch **`KNULLI USB Link.exe`**. A small Windows .NET Framework 4.x launcher selects language and, only when missing, asks permission to install Microsoft's .NET 8 Desktop Runtime once for the current user. The internal `RG35XXUsbInternetConnector.exe` is framework-dependent; `backend/` remains readable and hash-verified. Do not directly launch the internal EXE on machines lacking .NET 8.
+Following user hardware feedback, the delivery format is **a small ZIP of a folder**, not a lone self-contained EXE. Download the newest successful `windows-portable-zip` build, extract the inner ZIP, then launch **`KNULLI USB Link.exe`**. A small Windows .NET Framework 4.x launcher selects language and, only when missing, asks permission to install Microsoft's .NET 10 Desktop Runtime once for the current user. The internal `RG35XXUsbInternetConnector.exe` is framework-dependent; `backend/` remains readable and hash-verified. Do not directly launch the internal EXE on machines lacking .NET 10.
 
 The EXE automatically installs **Google's official Android SDK Platform-Tools into `platform-tools/` beside itself**, not into a hidden global folder. The first-run setup asks for language (Korean, English, Japanese) **before** showing a localized Google SDK license dialog. Language and setup markers are saved in `data/`, while SSH private keys and sensitive logs remain private in the Windows user's `%LOCALAPPDATA%`. The main GUI continues to have one Connect/Disconnect button and no update progress bar.
 
-The ADB probe now recognizes tab/space-separated `adb devices -l` output and checks app port 5056 as well as the standard port 5037 when necessary, without intentionally terminating a shared ADB daemon. It displays serial-redacted English diagnostics in the activity log. These changes address the user's report that a physically connected device appeared disconnected; **actual physical re-testing is still required**.
+The beta.2 development branch now uses **one standard ADB server on port 5037**, shared with ADB Explorer regardless of application launch order. Passive `host:devices-l` checks and `host:track-devices` notifications no longer start competing servers during polling. A genuinely active session created by a legacy build on port 5056 remains pinned only for explicit disconnect. The app never terminates shared 5037 and never automatically connects USB Internet. **The USB-first and ADB Explorer launch-order fixes require physical re-testing before beta.2 release.**
 
 Future GitHub Release application updates must provide `RG35XX-USB-Internet-Connector.zip`, containing the launcher, framework-dependent EXE and backend. The updater stages/verifies and swaps the set together while preserving `platform-tools/` and `data/`.
 

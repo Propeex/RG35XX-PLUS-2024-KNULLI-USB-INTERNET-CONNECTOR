@@ -1,6 +1,21 @@
 # Roadmap and acceptance criteria
 
-Current phase: **beta preparation**. Existing v1.4/v1.6 ZIP names are historical prototypes, not GitHub versions.
+Current phase: **public Beta with limited device validation**. Existing v1.4/v1.6 ZIP names are historical prototypes, not GitHub versions.
+
+## Beta.2 release acceptance and constraints (2026-11-17)
+
+- [x] First public `v0.1.0-beta.1` release was published with a checksummed portable ZIP.
+- [x] Real user tested starting KNULLI USB Link before or after initially connecting a USB-ADB-mode device; Windows ADB detection succeeds once the device USB mode is correctly enumerated.
+- [x] Real user tested both KNULLI USB Link and ADB Explorer start/close orders; switching to standard shared **ADB 5037** prevents observed two-server contention, while background shared `adb.exe` is intentionally preserved on GUI close.
+- [x] Offline test checks for native host:devices-l and host:track-devices notifications; ADB Explorer is never terminated by this program.
+- [x] Offline mocked process tests reject unrelated SSH PID collisions, verify SSH tunnel exit before deleting its PID marker, and preserve external ADB servers.
+- [x] User explicitly **rejected firmware/KNULLI USB Gadget repairs** as a public distribution requirement: do not install a USB reconnection service, modify device USB-mode scripts, or automatically reset OS USB functions.
+- [ ] **Known upstream/USB limitation:** On the tested RG35XX+ 2024, cable unplug/replug may result in Windows Device Manager showing no handheld USB device at all until KNULLI USB mode is reset. Both Windows ADB applications then cannot connect. Provide localized recovery guidance without pretending ADB commands can repair a device that did not enumerate.
+- [ ] Exact beta.2 ZIP on physical Windows/handheld: repeat manual START 6/6 → STOP 4/4 → START, verify native HTTPS, no orphaned SSH, sleep/unplug cancellation, PortMaster and device state labels.
+- [ ] Test fresh Windows installer, official Google Platform-Tools, beta.1 → beta.2 upgrade, rollback, and future signing.
+- [ ] Stability/reliability sign-off required before `v1.0.0` release. Publishing an experimental beta is not stable validation.
+
+**Historical sections below are snapshots from earlier PRs and may describe superseded 5056 or packaging designs. The current shared-5037 policy above is authoritative.**
 
 ## Phase 0 — Repository foundation
 - [x] Write public README and accurate support scope

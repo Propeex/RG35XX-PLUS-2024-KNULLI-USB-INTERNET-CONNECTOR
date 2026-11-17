@@ -139,3 +139,68 @@ Regression acceptance:
 2. Press Connect. Confirm stage 6/6 does **not** remain visible after the backend reports `USB Internet action completed successfully.`; the Internet label goes green and the button switches to Disconnect without relaunching.
 3. Wait 1 minute, then click Disconnect and verify the SSH process, KNULLI rgusb0 route, owned port 5056 and button state reset; do not kill any independently owned port 5037 ADB daemon.
 4. Repeat START/STOP once. If 6/6 persists, provide the new `*-start.log` showing timestamps between `Stage compatibility`, `Connected:`, and `USB Internet action completed successfully.`. No SSH private key.
+
+
+## Historical first beta.2 prototype (5056-based; superseded below)
+
+> This archived acceptance plan describes an **earlier** candidate which was subsequently tested and found to create a USB conflict when KNULLI USB Link started before ADB Explorer. Do not use its 5056-first approach. The later **shared-5037** plan below is authoritative.
+
+The hardware user reported these six scenarios:
+1. Device already connected when the app starts: GUI does not detect until USB mode reset.
+2. Resetting the handheld's USB mode makes detection work.
+3. App running before plugging in the device: GUI does not detect until USB mode reset.
+4. Resetting USB mode after step 3 makes detection work.
+5. Once recognized, closing/reopening the GUI retains detection.
+6. Closing ADB Explorer disconnects device detection; only resetting KNULLI USB mode restored it.
+
+**Code finding:** Before this patch, each 2.5-second probe could call \`adb -P 5056 devices -l\` and then \`adb -P 5037 devices -l\`. ADB's client-side \`devices\` command implicitly launches the respective server if it is not running, so the app itself could create two USB-claiming ADB servers. The observed USB-reset dependency could ALSO reflect Windows USB driver/KNULLI adbd state; it cannot be conclusively attributed to dual servers without a process trace.
+
+**Fix and safety rules:**
+- Prefer **passive host:devices-l** smart-socket queries; never create an ADB daemon merely to probe whether an existing server sees the device
+- If neither server exists, start a single app-owned server at port 5056; never start 5056 while port 5037 is already listening
+- If 5037 comes online while app-owned 5056 is idle, retire only the owned 5056 so the external app can share the USB device
+- Use **host:track-devices** TCP stream on the selected server for live change notifications; retain 2.5-second fallback polling, suppress serials and throttle tracker retries
+- While START/STOP or an SSH session is active, pin the current port and do not kill/recreate/switch servers
+- If ADB Explorer stops 5037 while idle, detect its disappearance and start one dedicated 5056 server after both ports are absent; do **not** auto-START USB Internet or reconfigure the handheld's USB mode
+- Terminate only a 5056 server created by this GUI instance. Never kill an unknown 5056 listener, shared 5037 server, ADB Explorer process, or reset device-side adbd as a recovery measure
+
+**Test once in this exact order using the newest PR development ZIP (not beta.1):**
+1. Start ADB Explorer *first*, leave device plugged in, then start KNULLI USB Link. Check the log says \`existing shared\` / \`server 5037\` and device is green without USB reset
+2. With ADB Explorer closed and no USB connection, open KNULLI USB Link, then connect USB. Check dedicated \`5056\` is chosen and the device turns green without resetting USB mode
+3. With the app recognizing the device but Internet not started, open and close ADB Explorer. Watch whether selection switches and whether the device is detected without USB reset
+4. With ADB Explorer using \`5037\`, start USB Internet in KNULLI USB Link. Close ADB Explorer *only if it is safe for the connected network*. The app should not silently move an existing SSH tunnel to another port. If it loses the server, use explicit Disconnect/reconnect; no automatic Internet reconnection
+5. Check START -> STOP -> START with new server selection. The GUI should complete 6/6, turn Internet green, and switch to Disconnect, without lingering owned SSH processes
+6. If detection still requires USB reset, collect only the redacted **ADB server port/status messages** immediately before the reset. Report whether \`5037\` or \`5056\` was selected and whether ADB Explorer was running. This distinguishes server loss from lower-level USB/driver issues
+
+**Coverage:** Windows CI uses an in-process fake ADB TCP server to test framing, host device queries and state-change messages, with no actual adb.exe, no attached USB hardware and no real SSH tunnel. Physical tests are still required before merging or publishing beta.2.
+
+## ADB Explorer launch-order regression — shared 5037 release candidate
+
+The user tested the initial beta.2 single-server discovery attempt and reported:
+- **1** (USB already connected, then KNULLI USB Link starts): still not recognized until device USB-mode reset
+- **3** (app already open, then USB plugged in): still not recognized until device USB-mode reset
+- **6** (close ADB Explorer after detection): **fixed** in the previous candidate
+- **NEW** (start KNULLI USB Link before ADB Explorer): when Explorer subsequently opens, **both apps lose the USB device** until USB-mode reset
+- **Opposite order** (ADB Explorer first, then KNULLI USB Link): both work
+
+These observations strongly implicate ADB's **5056-vs-5037 ownership conflict**. The previous patch avoided creating simultaneous servers from a single probe, but still *created 5056 first* when Explorer was not running. Explorer then started its standard 5037 daemon, apparently invalidating USB transport ownership.
+
+**Revised design:**
+- All NEW manual connections and device discovery use standard **5037**, regardless of app launch order. If no ADB server exists, KNULLI USB Link starts one at 5037 (using official Google platform-tools); Explorer subsequently shares it.
+- Passive host:devices-l / host:track-devices over the selected smart-socket remains; no extra adb.exe process for idle polling.
+- A stale, still-running **legacy 5056** server is *not killed or competed with*: no new 5037 daemon starts until it exits. The log says \`Legacy ADB server 5056 is still running\`. Close the previous connector process normally rather than killing an unknown adb.exe.
+- Only if an existing SSH session was forwarded through legacy 5056 does it remain temporarily pinned to 5056 for an explicit STOP; **no automatic connection restart**, no USB-mode reset and no forced shutdown of 5037.
+- Since 5037 is now shared, the GUI never stops 5037 on normal exit. That process may remain running to serve ADB Explorer; this is **intentional coexistence**, not an orphaned per-app daemon.
+- If ADB Explorer closes and kills the shared server while Internet is connected, the established forward may be lost; the UI must not invent a restored connection. STOP and manually reconnect after it returns. Hardware confirmation needed.
+
+**Required real-device acceptance (use the latest PR #12 \`windows-portable-zip\`, not the published beta.1):**
+1. Close all previous KNULLI USB Link windows. With ADB Explorer closed, plug in RG35XX+ and start new KNULLI USB Link. Expect \`ADB device ready (server 5037, shared with ADB Explorer)\` without device USB reset
+2. Close the app, leave USB plugged, open new KNULLI USB Link again. Expect immediate device recognition
+3. Unplug USB, leave app running, reconnect cable. Expect recognition without device USB reset
+4. **New failure case:** with app already running and recognizing device, start ADB Explorer. Expect *both* apps to keep seeing the device
+5. Opposite order: start Explorer first, then KNULLI USB Link. Expect both to see the device
+6. Close Explorer while app remains open (Internet disconnected). Expect app to retain or regain device recognition without USB-mode reset
+7. Manually START Internet, verify 6/6 completes and button becomes Disconnect. STOP and verify remote cleanup, then START again. Do not auto-reconnect on a disconnected ADB server
+8. If a case fails, copy only the lines around \`ADB server 5037\`, \`Legacy ADB server 5056\`, \`ADB device ready\`, and the relevant START/STOP stage. Avoid revealing device serials or private keys
+
+**Hardware status:** Not yet tested. PR #12 remains Draft, no change to main or the public \`v0.1.0-beta.1\` Release.

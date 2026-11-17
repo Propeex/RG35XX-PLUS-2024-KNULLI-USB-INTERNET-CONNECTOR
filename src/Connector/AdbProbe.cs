@@ -4,184 +4,245 @@ using System.Threading;
 namespace RG35XXUsbInternetConnector;
 
 /// <summary>
-/// Probes app-dedicated port 5056 first, then the standard shared port 5037
-/// when needed. Parsing accepts tabs OR spaces in ADB devices -l output.
-/// The chosen port is reused by SSH/PowerShell; never kill shared 5037.
-/// Never include a device serial in diagnostic logs.
+/// Uses one shared ADB server (standard port 5037) for all new USB sessions.
+/// Passive socket queries do not spawn a second server, and the GUI never
+/// terminates shared ADB. A pre-existing legacy SSH tunnel can stay pinned
+/// to port 5056 for safe manual disconnect.
 /// </summary>
 internal static class AdbProbe
 {
-    private const string DedicatedPort = "5056";
+    // ADB Explorer uses the standard 5037 daemon. Beginning with 5056 and
+    // subsequently launching ADB Explorer created competing USB owners.
+    // Always use a single shared 5037 server for new discovery and sessions.
+    // A *pre-existing* live tunnel stays pinned to its persisted port so that
+    // disconnect can still clean up a session created by an older build.
     private const string SharedPort = "5037";
+    private const string LegacyPort = "5056";
     private static string _selectedPort = LoadPreviousTunnelPort();
-
-    private static string LoadPreviousTunnelPort()
-    {
-        string state = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RG35XX_USB_FullNet");
-        if (!File.Exists(Path.Combine(state, "ssh.pid")))
-            return DedicatedPort;
-        try
-        {
-            string port = File.ReadAllText(Path.Combine(state, "adb-port.txt")).Trim();
-            return port is DedicatedPort or SharedPort ? port : DedicatedPort;
-        }
-        catch (IOException) { return DedicatedPort; }
-        catch (UnauthorizedAccessException) { return DedicatedPort; }
-    }
     private static string _lastDiagnostic = "";
+    private static bool _selectedServerPresent;
+    private static DateTimeOffset _nextStartAttempt = DateTimeOffset.MinValue;
+
+    private static readonly SemaphoreSlim DiscoveryGate = new(1, 1);
+    private static readonly object TrackingGate = new();
+    private static CancellationTokenSource? _trackingCancellation;
+    private static Task? _trackingTask;
+    private static string? _trackingPort;
+    private static DateTimeOffset _nextTrackingAttempt = DateTimeOffset.MinValue;
 
     internal static string ServerPort => Volatile.Read(ref _selectedPort);
     internal static string LastDiagnostic => Volatile.Read(ref _lastDiagnostic);
 
-    internal static bool HasReadyDevice(string listing)
+    private static string LoadPreviousTunnelPort()
     {
-        return ParseState(listing) == "device";
+        string folder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RG35XX_USB_FullNet");
+        if (!File.Exists(Path.Combine(folder, "ssh.pid")))
+            return SharedPort;
+
+        try
+        {
+            string port = File.ReadAllText(Path.Combine(folder, "adb-port.txt")).Trim();
+            return port is LegacyPort or SharedPort ? port : SharedPort;
+        }
+        catch (IOException) { return SharedPort; }
+        catch (UnauthorizedAccessException) { return SharedPort; }
     }
 
-    private static string ParseState(string listing)
+    internal static bool HasReadyDevice(string listing)
+        => ParseState(listing) == "device";
+
+    internal static string ParseState(string listing)
     {
-        string result = "none";
         int ready = 0;
+        string state = "none";
         foreach (string line in listing.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             string[] columns = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (columns.Length < 2) continue;
-            string state = columns[1].Trim();
-            if (state == "device") ready++;
-            if (state == "unauthorized") result = "unauthorized";
-            if (state == "offline" && result != "unauthorized") result = "offline";
+            string value = columns[1].Trim();
+            if (value == "device") ready++;
+            else if (value == "unauthorized") state = "unauthorized";
+            else if (value == "offline" && state != "unauthorized") state = "offline";
         }
-        // The PowerShell engine requires exactly one authorized device.
         if (ready > 1) return "multiple";
-        return ready == 1 ? "device" : result;
+        return ready == 1 ? "device" : state;
     }
 
-    private sealed record ProbeResult(bool Ready, string State);
+    // Never start a second ADB server when an old isolated 5056 daemon still
+    // exists. We do not automatically terminate an unowned process.
+    internal static bool CanStartShared(bool sharedPresent, bool legacyPresent,
+        bool portPinned) => !sharedPresent && !legacyPresent && !portPinned;
 
-    private static async Task<ProbeResult> QueryAsync(string port)
-    {
-        if (!File.Exists(AppPaths.AdbPath)) return new ProbeResult(false, "ADB not installed");
-
-        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var start = new ProcessStartInfo(AppPaths.AdbPath)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        start.ArgumentList.Add("-P");
-        start.ArgumentList.Add(port);
-        start.ArgumentList.Add("devices");
-        start.ArgumentList.Add("-l");
-
-        using var process = Process.Start(start)
-            ?? throw new InvalidOperationException("Unable to start official adb.exe.");
-        try
-        {
-            Task<string> stdout = process.StandardOutput.ReadToEndAsync(cancel.Token);
-            Task<string> stderr = process.StandardError.ReadToEndAsync(cancel.Token);
-            await process.WaitForExitAsync(cancel.Token);
-            string listing = await stdout;
-            _ = await stderr; // do not log a raw serial or private path
-            if (process.ExitCode != 0)
-                return new ProbeResult(false, "adb returned exit code " + process.ExitCode);
-            string state = ParseState(listing);
-            return new ProbeResult(state == "device", state);
-        }
-        catch (OperationCanceledException)
-        {
-            try { process.Kill(entireProcessTree: true); } catch { }
-            return new ProbeResult(false, "adb timed out");
-        }
-    }
-
-    internal static async Task StopDedicatedAsync()
-    {
-        if (!File.Exists(AppPaths.AdbPath)) return;
-        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var start = new ProcessStartInfo(AppPaths.AdbPath)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        foreach (string arg in new[] { "-P", DedicatedPort, "kill-server" })
-            start.ArgumentList.Add(arg);
-
-        Process? proc = null;
-        try
-        {
-            proc = Process.Start(start);
-            if (proc is null) return;
-            Task<string> output = proc.StandardOutput.ReadToEndAsync(cancel.Token);
-            Task<string> error = proc.StandardError.ReadToEndAsync(cancel.Token);
-            await proc.WaitForExitAsync(cancel.Token);
-            await Task.WhenAll(output, error);
-        }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException
-                or InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            // Reap our own ADB client if kill-server takes too long.
-            try
-            {
-                if (proc is not null && !proc.HasExited)
-                    proc.Kill(entireProcessTree: true);
-            }
-            catch (Exception e) when (e is InvalidOperationException
-                or System.ComponentModel.Win32Exception) { }
-        }
-        finally { proc?.Dispose(); }
-    }
+    internal static string SelectDiscoveryPort(bool pinned, string persisted)
+        => pinned && persisted == LegacyPort ? LegacyPort : SharedPort;
 
     internal static async Task<bool> HasReadyDeviceAsync(
         bool keepServer = false, bool allowFallback = true)
     {
-        string preferred = ServerPort;
-        var first = await QueryAsync(preferred);
-        if (first.Ready)
+        await DiscoveryGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            // Keep the app-owned ADB daemon available for subsequent polls and
-            // for Connect. Killing it every 2.5s caused repeated cold starts.
-            Volatile.Write(ref _lastDiagnostic,
-                "ADB device ready (server " + preferred +
-                (preferred == SharedPort ? ", shared)" : ", app-owned)"));
-            return true;
+            bool pinned = keepServer || !allowFallback;
+            string chosen = SelectDiscoveryPort(pinned, ServerPort);
+            if (pinned)
+            {
+                // Never auto-start or switch away from the server that owns
+                // the active USB forward (including a legacy 5056 session).
+                var existing = await AdbServerProtocol.QueryAsync(chosen).ConfigureAwait(false);
+                Volatile.Write(ref _selectedPort, chosen);
+                Volatile.Write(ref _selectedServerPresent, existing.ServerPresent);
+                Volatile.Write(ref _lastDiagnostic, existing.Ready
+                    ? DescribeReady(chosen)
+                    : $"ADB server {chosen}: {DescribeState(existing)} (tunnel port pinned).");
+                return existing.Ready;
+            }
+
+            // Passive socket queries do not launch adb.exe or contend for USB.
+            var shared = await AdbServerProtocol.QueryAsync(SharedPort).ConfigureAwait(false);
+            if (!shared.ServerPresent)
+            {
+                var legacy = await AdbServerProtocol.QueryAsync(LegacyPort).ConfigureAwait(false);
+                if (legacy.ServerPresent)
+                {
+                    Volatile.Write(ref _selectedPort, SharedPort);
+                    Volatile.Write(ref _selectedServerPresent, false);
+                    Volatile.Write(ref _lastDiagnostic,
+                        "Legacy ADB server 5056 is still running. " +
+                        "Close the previous connector instance; refusing to start competing 5037.");
+                    return false;
+                }
+
+                if (CanStartShared(shared.ServerPresent, legacy.ServerPresent, pinned) &&
+                    DateTimeOffset.UtcNow >= _nextStartAttempt)
+                {
+                    // One shared daemon, regardless of which app starts first.
+                    _nextStartAttempt = DateTimeOffset.UtcNow.AddSeconds(8);
+                    await StartSharedAsync().ConfigureAwait(false);
+                    shared = await AdbServerProtocol.QueryAsync(SharedPort).ConfigureAwait(false);
+                }
+            }
+
+            Volatile.Write(ref _selectedPort, SharedPort);
+            Volatile.Write(ref _selectedServerPresent, shared.ServerPresent);
+            Volatile.Write(ref _lastDiagnostic, shared.Ready
+                ? DescribeReady(SharedPort)
+                : $"ADB server {SharedPort}: {DescribeState(shared)}. " +
+                  "Waiting for KNULLI USB ADB (USB mode reset not requested).");
+            return shared.Ready;
+        }
+        finally
+        {
+            DiscoveryGate.Release();
+        }
+    }
+
+    private static string DescribeReady(string port)
+        => "ADB device ready (server " + port +
+            (port == SharedPort ? ", shared with ADB Explorer" : ", existing legacy session") + ").";
+
+    private static string DescribeState(AdbServerProtocol.Snapshot result)
+        => result.ServerPresent ? result.State : "not running";
+
+    private static async Task StartSharedAsync()
+    {
+        if (!File.Exists(AppPaths.AdbPath))
+        {
+            Volatile.Write(ref _lastDiagnostic, "Official Google ADB is not installed.");
+            return;
         }
 
-        // During START/STOP, use only the existing selected ADB server.
-        // Starting another server could disrupt an in-flight SSH forward.
-        if (!allowFallback)
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(7));
+        var info = new ProcessStartInfo(AppPaths.AdbPath)
         {
-            Volatile.Write(ref _lastDiagnostic,
-                "ADB device not ready on server " + preferred +
-                " during USB operation (" + first.State + ").");
-            return false;
-        }
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (string arg in new[] { "-P", SharedPort, "start-server" })
+            info.ArgumentList.Add(arg);
 
-        // Probe both servers without repeatedly killing the dedicated one.
-        // Repeated stop/start cycles caused USB readiness flicker.
-        string alternative = preferred == DedicatedPort ? SharedPort : DedicatedPort;
-        var second = await QueryAsync(alternative);
-        if (second.Ready)
+        try
         {
-            Volatile.Write(ref _selectedPort, alternative);
-            Volatile.Write(ref _lastDiagnostic,
-                "ADB device ready (server " + alternative +
-                (alternative == SharedPort ? ", shared; reused existing ADB)" : ", app-owned)"));
-            return true;
+            using Process? child = Process.Start(info);
+            if (child is null) return;
+            try
+            {
+                Task<string> output = child.StandardOutput.ReadToEndAsync(timeout.Token);
+                Task<string> error = child.StandardError.ReadToEndAsync(timeout.Token);
+                await child.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+                await Task.WhenAll(output, error).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    if (!child.HasExited) child.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException) { }
+                catch (System.ComponentModel.Win32Exception) { }
+            }
         }
-        string reason = first.State == "multiple" || second.State == "multiple"
-            ? "Multiple authorized ADB devices detected; disconnect other devices."
-            : first.State == "unauthorized" || second.State == "unauthorized"
-            ? "ADB device unauthorized. Check device authorization."
-            : first.State == "offline" || second.State == "offline"
-                ? "ADB device offline. Check USB cable and KNULLI ADB mode."
-                : "No authorized ADB device on ports 5056 or 5037. Check KNULLI USB ADB mode, Windows driver, and cable.";
-        Volatile.Write(ref _lastDiagnostic, reason);
-        return false;
+        catch (System.ComponentModel.Win32Exception) { }
+        catch (IOException) { }
+        // Even if we were first to start 5037, it is now shared. Closing
+        // KNULLI USB Link must not kill a server relied upon by ADB Explorer.
+    }
+
+    /// <summary>
+    /// Subscribe to events from an already-running selected server.
+    /// The native host:track-devices stream has no adb.exe child process.
+    /// </summary>
+    internal static void EnsureTracking(Action onChanged)
+    {
+        if (!Volatile.Read(ref _selectedServerPresent)) return;
+        string port = ServerPort;
+        lock (TrackingGate)
+        {
+            if (_trackingPort == port && _trackingTask is { IsCompleted: false })
+                return;
+            // If an external ADB server rejects tracking, do not spin in
+            // immediate restart cycles; the timer will retry later.
+            if (_trackingPort == port && DateTimeOffset.UtcNow < _nextTrackingAttempt)
+                return;
+            _nextTrackingAttempt = DateTimeOffset.UtcNow.AddSeconds(4);
+            _trackingCancellation?.Cancel();
+            _trackingCancellation?.Dispose();
+
+            var cancellation = new CancellationTokenSource();
+            _trackingCancellation = cancellation;
+            _trackingPort = port;
+            _trackingTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await AdbServerProtocol.TrackAsync(port, onChanged,
+                        cancellation.Token);
+                }
+                catch (Exception ex) when (ex is OperationCanceledException
+                    or IOException or System.Net.Sockets.SocketException
+                    or ObjectDisposedException or InvalidDataException) { }
+                finally
+                {
+                    if (!cancellation.IsCancellationRequested)
+                        onChanged(); // lost server; re-discover without USB reset
+                }
+            });
+        }
+    }
+
+    internal static void StopTracking()
+    {
+        lock (TrackingGate)
+        {
+            _trackingCancellation?.Cancel();
+            _trackingCancellation?.Dispose();
+            _trackingCancellation = null;
+            _trackingTask = null;
+            _trackingPort = null;
+            _nextTrackingAttempt = DateTimeOffset.MinValue;
+        }
     }
 }

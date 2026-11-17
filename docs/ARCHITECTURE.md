@@ -6,7 +6,7 @@
 
 ## Intended technology
 
-- Windows 10/11 x64, .NET 8 **WinForms** desktop app (single EXE, self-contained publishing preferred so users do not install a runtime); evaluate distribution size later.
+- Windows 11 x64 (Windows 10 x64 best effort, depending on Microsoft's OS lifecycle), **.NET 10 LTS WinForms** desktop app. Publish the small framework-dependent EXE beside a .NET Framework 4.x bootstrap launcher that installs the supported Microsoft Windows Desktop Runtime with user consent when needed.
 - Built-in `HttpClient` for official downloads and GitHub Releases metadata; `System.IO.Compression` for ZIP.
 - An application-managed Platform-Tools directory under `%LOCALAPPDATA%` rather than requiring a manual copy into `platform-tools`. An existing local `adb.exe` may be offered as an advanced override, but the default must be zero-setup.
 - Background operations async; GUI remains responsive; cancellation/recovery must not leave TUN/route half-configured.

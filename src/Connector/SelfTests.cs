@@ -16,6 +16,21 @@ internal static class SelfTests
         {
             Assert(UsbBackendBundle.VerifyDistribution(out string backendError),
                 "portable backend integrity: " + backendError);
+            Assert(AdbProbe.CanStartShared(false, false, false),
+                "start standard 5037 only when no ADB server exists");
+            Assert(!AdbProbe.CanStartShared(true, false, false),
+                "never start an already running 5037 server");
+            Assert(!AdbProbe.CanStartShared(false, true, false),
+                "never launch 5037 while old 5056 owns USB");
+            Assert(!AdbProbe.CanStartShared(false, false, true),
+                "never restart a missing server during an active tunnel");
+            Assert(AdbProbe.SelectDiscoveryPort(false, "5056") == "5037",
+                "idle discovery switches to 5037, independent of previous session");
+            Assert(AdbProbe.SelectDiscoveryPort(true, "5056") == "5056",
+                "active legacy tunnel remains pinned to 5056");
+            Assert(AdbProbe.SelectDiscoveryPort(true, "5037") == "5037",
+                "active shared tunnel remains pinned to 5037");
+            AdbProtocolSelfTests.RunAsync().GetAwaiter().GetResult();
             Assert(AdbProbe.HasReadyDevice("0123456789     device product:occam model:Nexus_4"),
                 "accept whitespace-separated ADB device line");
             Assert(AdbProbe.HasReadyDevice("0123456789\tdevice product:occam"),
@@ -48,6 +63,12 @@ internal static class SelfTests
                 "adb errors cannot prove remote HTTPS");
             Assert(UiStrings.Get("ko-KR", "DeviceDisconnected") == "연결 안 됨",
                 "Korean device disconnected state");
+            Assert(UiStrings.Get("ko-KR", "UsbReconnectHint").Contains("USB 모드"),
+                "Korean USB reconnection limitation is explained");
+            Assert(UiStrings.Get("en-US", "UsbReconnectHint").Contains("USB mode"),
+                "English USB reconnection limitation is explained");
+            Assert(UiStrings.Get("ja-JP", "UsbReconnectHint").Contains("USB モード"),
+                "Japanese USB reconnection limitation is explained");
             Assert(UiStrings.Get("ko-KR", "InternetConnected") == "연결됨",
                 "Korean Internet connected state");
             Assert(UiStrings.Get("en-US", "ProgressStage").Contains("{0}"),
@@ -56,6 +77,11 @@ internal static class SelfTests
                 "manual STOP progress supports Japanese");
             Assert(PortableUpdatePackage.Launcher == "KNULLI USB Link.exe",
                 "portable update includes the small .NET prerequisite launcher");
+            string version = typeof(Program).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion.Split('+')[0] ?? "";
+            Assert(version == "0.1.0-beta.2",
+                "release package must embed the exact beta.2 application version");
             Assert(SemVersion.TryParse("v0.1.0-beta.1", out var beta1), "parse beta1");
             Assert(SemVersion.TryParse("0.1.0-beta.2", out var beta2), "parse beta2");
             Assert(SemVersion.TryParse("v0.1.0", out var stable), "parse stable");
@@ -76,6 +102,9 @@ internal static class SelfTests
             Assert(typeof(MainForm).GetField("_deviceValue",
                     BindingFlags.Instance | BindingFlags.NonPublic) is not null,
                 "MainForm has independent device indicator");
+            Assert(typeof(MainForm).GetField("_usbReconnectHint",
+                    BindingFlags.Instance | BindingFlags.NonPublic)?.FieldType == typeof(Label),
+                "GUI has a minimal localized hint after a device goes missing");
             Assert(typeof(MainForm).GetField("_internetValue",
                     BindingFlags.Instance | BindingFlags.NonPublic) is not null,
                 "MainForm has independent Internet indicator");
