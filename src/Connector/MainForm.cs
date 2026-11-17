@@ -605,7 +605,11 @@ internal sealed class MainForm : Form
         if (_closed || IsDisposed) return;
         if (InvokeRequired)
         {
-            BeginInvoke(new Action(() => AppendLog(message)));
+            // An ADB tracker or PowerShell log callback can arrive after
+            // the form's Win32 handle is destroyed. Drop that late event
+            // rather than letting BeginInvoke abort a live network action.
+            try { BeginInvoke(new Action(() => AppendLog(message))); }
+            catch (InvalidOperationException) { /* form closed during callback */ }
             return;
         }
         if (_log.TextLength > 0) _log.AppendText(Environment.NewLine);
