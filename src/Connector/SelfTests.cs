@@ -77,6 +77,11 @@ internal static class SelfTests
                 "manual STOP progress supports Japanese");
             Assert(PortableUpdatePackage.Launcher == "KNULLI USB Link.exe",
                 "portable update includes the small .NET prerequisite launcher");
+            string version = typeof(Program).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion.Split('+')[0] ?? "";
+            Assert(version == "0.1.0-beta.2",
+                "release package must embed the exact beta.2 application version");
             Assert(SemVersion.TryParse("v0.1.0-beta.1", out var beta1), "parse beta1");
             Assert(SemVersion.TryParse("0.1.0-beta.2", out var beta2), "parse beta2");
             Assert(SemVersion.TryParse("v0.1.0", out var stable), "parse stable");
