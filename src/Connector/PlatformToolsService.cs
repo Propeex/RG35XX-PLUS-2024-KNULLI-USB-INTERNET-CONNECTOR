@@ -46,7 +46,8 @@ internal static class PlatformToolsService
             log("Latest official Google Platform-Tools revision: " + latest.Revision);
         }
         catch (Exception ex) when (ex is HttpRequestException or System.Xml.XmlException
-                or InvalidOperationException or TaskCanceledException)
+                or InvalidOperationException or InvalidDataException or UriFormatException
+                or TaskCanceledException)
         {
             log("SDK repository metadata unavailable: " + ex.Message);
             if (installed)
@@ -204,7 +205,15 @@ internal static class PlatformToolsService
         using var response = await StartupHttp.Client.GetAsync(RepositoryUri, ct);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        var document = XDocument.Load(stream);
+        return SelectLatestStableWindowsPackage(XDocument.Load(stream));
+    }
+
+    // The official SDK XML can list several revisions of the same package.
+    // Its document order is not a "latest" guarantee: choose the maximum
+    // stable revision with a Windows archive instead of the first match.
+    internal static SdkPackage SelectLatestStableWindowsPackage(XDocument document)
+    {
+        SdkPackage? best = null;
         var candidates = document.Descendants()
             .Where(e => e.Name.LocalName == "remotePackage"
                 && (string?)e.Attribute("path") == "platform-tools");
@@ -212,14 +221,15 @@ internal static class PlatformToolsService
         foreach (var pkg in candidates)
         {
             var channel = pkg.Elements().FirstOrDefault(e => e.Name.LocalName == "channelRef");
-            // Android SDK channel-0 = stable; do not install canary packages.
             if (channel is not null && (string?)channel.Attribute("ref") != "channel-0")
                 continue;
-            var revision = pkg.Elements().FirstOrDefault(e => e.Name.LocalName == "revision")
-                ?? throw new InvalidDataException("Platform-Tools revision is missing.");
+            var revision = pkg.Elements().FirstOrDefault(e => e.Name.LocalName == "revision");
+            if (revision is null) continue;
+
             int major = ParseRevisionPart(revision, "major");
             int minor = ParseRevisionPart(revision, "minor");
             int micro = ParseRevisionPart(revision, "micro");
+            var version = new Version(major, minor, micro);
 
             var archives = pkg.Elements().FirstOrDefault(e => e.Name.LocalName == "archives");
             if (archives is null) continue;
@@ -228,10 +238,12 @@ internal static class PlatformToolsService
                 string? os = archive.Elements().FirstOrDefault(
                     e => e.Name.LocalName is "host-os" or "hostOs")?.Value;
                 if (os != "windows") continue;
+
                 var complete = archive.Elements().FirstOrDefault(e => e.Name.LocalName == "complete");
                 string? relative = complete?.Elements()
                     .FirstOrDefault(e => e.Name.LocalName == "url")?.Value.Trim();
                 if (string.IsNullOrWhiteSpace(relative)) continue;
+
                 Uri target = new(RepositoryBase, relative);
                 if (target.Scheme != Uri.UriSchemeHttps || target.Host != "dl.google.com")
                     throw new InvalidOperationException("Untrusted SDK repository URL.");
@@ -240,10 +252,14 @@ internal static class PlatformToolsService
                 string? sha = checksum?.Value.Trim();
                 if (sha is not null && (sha.Length != 64 || !sha.All(Uri.IsHexDigit)))
                     throw new InvalidDataException("SDK metadata contains malformed SHA256.");
-                return new SdkPackage(new Version(major, minor, micro), target, sha);
+
+                var candidate = new SdkPackage(version, target, sha);
+                if (best is null || candidate.Revision.CompareTo(best.Revision) > 0)
+                    best = candidate;
             }
         }
-        throw new InvalidOperationException("No stable Windows Platform-Tools package in SDK metadata.");
+        return best ?? throw new InvalidOperationException(
+            "No stable Windows Platform-Tools package in SDK metadata.");
     }
 
     private static int ParseRevisionPart(XElement revision, string part)
