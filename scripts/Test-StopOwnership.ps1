@@ -52,7 +52,8 @@ try {
         ProcessId = 123456
         Name = 'ssh.exe'
         CreationDate = [datetime]'2026-01-01T00:00:00'
-        CommandLine = 'ssh.exe -E "C:\Users\Tester\AppData\Local\RG35XX_USB_FullNet\ssh-client.log" -R 1080 -p 2222 root@127.0.0.1'
+        CommandLine = ('ssh.exe -E "{0}" -R 1080 -p 2222 root@127.0.0.1' -f
+            (Join-Path $script:state 'ssh-client.log'))
     }
     [IO.File]::WriteAllText($pidfile, '123456')
     [IO.File]::WriteAllText($portfile, '5037')
@@ -63,6 +64,26 @@ try {
     StopOwnedSSH
     if ($script:killed -ne 1 -or (Test-Path $pidfile) -or (Test-Path $portfile)) {
         throw 'A verified owned tunnel was not stopped and fully cleaned up.'
+    }
+
+    # Even an SSH command line with the SAME reverse tunnel arguments is
+    # unowned if -E points to someone else's diagnostics file. An unrelated
+    # process may reuse the PID previously stored in our marker.
+    $script:fakeProcess = [pscustomobject]@{
+        ProcessId = 123456
+        Name = 'ssh.exe'
+        CreationDate = [datetime]'2026-01-03T00:00:00'
+        CommandLine = 'ssh.exe -E "C:\OtherProgram\ssh-client.log" -R 1080 -p 2222 root@127.0.0.1'
+    }
+    [IO.File]::WriteAllText($pidfile, '123456')
+    [IO.File]::WriteAllText($portfile, '5037')
+    if (ProcessForOwnedSSH) {
+        throw 'SSH ownership was granted to an unrelated diagnostics directory.'
+    }
+    $refused = $false
+    try { StopOwnedSSH } catch { $refused = $true }
+    if (-not $refused -or $script:killed -ne 1 -or -not (Test-Path $pidfile)) {
+        throw 'Unowned SSH with matching arguments was killed or forgotten.'
     }
 
     # A PID belonging to an unrelated ssh.exe must NOT be killed, and its
