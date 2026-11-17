@@ -153,6 +153,11 @@ internal sealed class UsbEngineRunner
     internal static async Task<bool> NativeInternetHealthyAsync(CancellationToken cancellation)
     {
         if (!File.Exists(AppPaths.AdbPath)) return false;
+        // ADB's command-line client auto-starts a missing server. Health
+        // monitoring must NEVER revive a shared 5037 server that an external
+        // application just stopped, or disturb a pinned SSH tunnel.
+        if (!(await AdbServerProtocol.QueryAsync(AdbProbe.ServerPort)).ServerPresent)
+            return false;
         const string command = "if test -e /userdata/system/rgusb-fullnet/active && " +
             "ip link show rgusb0 >/dev/null 2>&1 && " +
             "curl --noproxy '*' -fsSI --max-time 7 https://example.com >/dev/null 2>&1; " +
