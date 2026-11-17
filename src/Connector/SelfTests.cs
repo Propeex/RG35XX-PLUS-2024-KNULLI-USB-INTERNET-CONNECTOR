@@ -16,6 +16,16 @@ internal static class SelfTests
         {
             Assert(UsbBackendBundle.VerifyDistribution(out string backendError),
                 "portable backend integrity: " + backendError);
+            Assert(!PlatformToolsService.ShouldDeferReplacement(false, true, false),
+                "first-time SDK installation is allowed before a local SDK exists");
+            Assert(!PlatformToolsService.ShouldDeferReplacement(true, false, false),
+                "SDK replacement is allowed when no ADB daemon is active");
+            Assert(PlatformToolsService.ShouldDeferReplacement(true, true, false),
+                "shared ADB 5037 must block optional SDK replacement");
+            Assert(PlatformToolsService.ShouldDeferReplacement(true, false, true),
+                "legacy ADB 5056 must block optional SDK replacement");
+            Assert(PlatformToolsService.ShouldDeferReplacement(true, true, true),
+                "any running daemon blocks optional SDK replacement");
             Assert(AdbProbe.CanStartShared(false, false, false),
                 "start standard 5037 only when no ADB server exists");
             Assert(!AdbProbe.CanStartShared(true, false, false),
