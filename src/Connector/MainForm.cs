@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -59,7 +60,10 @@ internal sealed class MainForm : Form
 
     internal MainForm()
     {
-        Text = "KNULLI USB Link — RG35XX+ (2024)";
+        string version = typeof(MainForm).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion.Split('+')[0] ?? "development";
+        Text = "KNULLI USB Link v" + version + " — RG35XX+ (2024)";
         // Use the branded PE icon for this window and the Windows taskbar.
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
         catch (Exception ex) when (ex is IOException or ArgumentException
