@@ -141,7 +141,9 @@ Regression acceptance:
 4. Repeat START/STOP once. If 6/6 persists, provide the new `*-start.log` showing timestamps between `Stage compatibility`, `Connected:`, and `USB Internet action completed successfully.`. No SSH private key.
 
 
-## ADB single-server discovery + tracking acceptance (candidate v0.1.0-beta.2)
+## Historical first beta.2 prototype (5056-based; superseded below)
+
+> This archived acceptance plan describes an **earlier** candidate which was subsequently tested and found to create a USB conflict when KNULLI USB Link started before ADB Explorer. Do not use its 5056-first approach. The later **shared-5037** plan below is authoritative.
 
 The hardware user reported these six scenarios:
 1. Device already connected when the app starts: GUI does not detect until USB mode reset.
@@ -172,7 +174,7 @@ The hardware user reported these six scenarios:
 
 **Coverage:** Windows CI uses an in-process fake ADB TCP server to test framing, host device queries and state-change messages, with no actual adb.exe, no attached USB hardware and no real SSH tunnel. Physical tests are still required before merging or publishing beta.2.
 
-## ADB Explorer launch-order regression — new 5037-only candidate
+## ADB Explorer launch-order regression — shared 5037 release candidate
 
 The user tested the initial beta.2 single-server discovery attempt and reported:
 - **1** (USB already connected, then KNULLI USB Link starts): still not recognized until device USB-mode reset
