@@ -149,9 +149,12 @@ function ProcessForOwnedSSH() {
     if (-not $p -or $p.Name -ne 'ssh.exe') { return $null }
     # Public-key setup can fail while the user successfully authenticates
     # with the KNULLI password. Such a session has no -i key argument.
-    # Require our private diagnostics path and the exact loopback tunnel
-    # instead of the optional identity filename.
-    if ($p.CommandLine -notmatch 'ssh-client\.log' -or
+    # The -E option must specify OUR exact private diagnostic path,
+    # not merely any file ending in "ssh-client.log". Otherwise PID reuse
+    # could cause us to stop an unrelated SSH tunnel with similar flags.
+    $ownedLog = [regex]::Escape((Join-Path $script:state 'ssh-client.log'))
+    $logArgument = '(?i)(?:^|\s)-E\s+"?' + $ownedLog + '"?(?:\s|$)'
+    if ($p.CommandLine -notmatch $logArgument -or
         $p.CommandLine -notmatch 'root@127\.0\.0\.1' -or
         $p.CommandLine -notmatch '(\s|^)-R\s+1080(\s|$)' -or
         $p.CommandLine -notmatch '(\s|^)-p\s+2222(\s|$)') { return $null }
