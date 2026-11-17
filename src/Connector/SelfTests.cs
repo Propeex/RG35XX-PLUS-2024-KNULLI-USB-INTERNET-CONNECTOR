@@ -107,6 +107,16 @@ internal static class SelfTests
                 "English USB reconnection limitation is explained");
             Assert(UiStrings.Get("ja-JP", "UsbReconnectHint").Contains("USB モード"),
                 "Japanese USB reconnection limitation is explained");
+            foreach (string language in new[] { "ko-KR", "en-US", "ja-JP" })
+            {
+                foreach (string key in new[] { "ActiveOperationOnExit",
+                    "DisconnectOnExit", "DisconnectFailedOnExit", "AlreadyRunning" })
+                {
+                    Assert(UiStrings.Get(language, key) != key &&
+                        !string.IsNullOrWhiteSpace(UiStrings.Get(language, key)),
+                        "Localized exit and duplicate-instance dialog: " + language + " " + key);
+                }
+            }
             Assert(UiStrings.Get("ko-KR", "InternetConnected") == "연결됨",
                 "Korean Internet connected state");
             Assert(UiStrings.Get("en-US", "ProgressStage").Contains("{0}"),
